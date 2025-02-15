@@ -14,7 +14,7 @@ int main() {
 
   auto renderer = Renderer(menu, [&] {
     return vbox({
-        text("Simple FTXUI TUI") | bold | center,
+        text("Welcome to MaiMail") | bold | center,
         separator(),
         menu->Render(),
     });
