@@ -11,22 +11,24 @@ int main() {
   std::vector<std::string> options = {"Option 1", "Option 2", "Option 3", "Quit"};
 
   auto menu = Menu(&options, &selected);
+  std::string input_string;
+  auto input = Input(&input_string, "Type commands here...") | border;
 
-  auto renderer = Renderer(menu, [&] {
+  auto container = Container::Vertical({
+      menu, 
+      input
+  });
+
+  auto renderer = Renderer(container, [&] {
     return vbox({
-        text("Welcome to MaiMail") | bold | center,
+        text("Welcome to MaiMail") | bold | hcenter,
         separator(),
-        menu->Render(),
+        menu->Render() | flex,
+        separator(),
+        input->Render()
     });
   });
 
-  screen.Loop(CatchEvent(renderer, [&](Event event) {
-    if (event == Event::Return && selected == 3) {
-      screen.ExitLoopClosure()();
-      return true;
-    }
-    return false;
-  }));
-
+  screen.Loop(renderer);
   return 0;
 }
