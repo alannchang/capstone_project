@@ -8,24 +8,24 @@ int main() {
   auto screen = ScreenInteractive::Fullscreen();
 
   int selected = 0;
-  std::vector<std::string> options = {"Option 1", "Option 2", "Option 3", "Quit"};
+  std::vector<std::string> options = {"Option 1", "Option 2", "Option 3"};
 
   auto menu = Menu(&options, &selected);
   std::string input_string;
-  auto input = Input(&input_string, "Type commands here...") | border;
+  auto user_input = Input(&input_string, "Type commands here...") | border;
 
   auto container = Container::Vertical({
       menu, 
-      input
+      user_input,
   });
 
   auto renderer = Renderer(container, [&] {
     return vbox({
-        text("Welcome to MaiMail") | bold | hcenter,
+        text("Welcome to MaiMail") | center,
         separator(),
         menu->Render() | flex,
         separator(),
-        input->Render()
+        user_input->Render()
     });
   });
 
