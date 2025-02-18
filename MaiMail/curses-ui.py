@@ -5,7 +5,6 @@ import requests
 
 menu = ['Tell Me a Dad Joke', 'Update Windows', 'Exit']
 
-
 def fetch_joke():
    return requests.get('https://icanhazdadjoke.com/', headers={'Accept': 'text/plain'}).content.decode('U8')
 
@@ -37,9 +36,10 @@ def make_me_laugh(stdscr):
 def print_menu(stdscr, selected):
    stdscr.clear()
    height, width = stdscr.getmaxyx()
+   stdscr.addstr(0, width // 2, "MaiMail v0.1")
    for idx, row in enumerate(menu):
-       x = width // 2 - len(row) // 2
-       y = height // 2 - len(menu) // 2 + idx
+       x = 0
+       y = 1 + idx
        if idx == selected:
            stdscr.attron(curses.A_REVERSE)
            stdscr.addstr(y, x, row)
@@ -49,9 +49,13 @@ def print_menu(stdscr, selected):
    stdscr.noutrefresh()
 
 
-def print_stats(stats, jokes_admired, win_updates):
+def print_stats(stats, width, win_updates):
+   status_bar_string = "Hello world!"
    stats.clear()
-   stats.addstr(0, 0, f'Jokes admired: {jokes_admired}')
+   stats.attron(curses.color_pair(1))
+   stats.addstr(0, 0, status_bar_string)
+   stats.addstr(0, len(status_bar_string), " " * (width - len(status_bar_string) - 1))
+   stats.attroff(curses.color_pair(1))
    stats.addstr(1, 0, f'Win Updates: {win_updates}')
    stats.noutrefresh()
 
@@ -89,8 +93,9 @@ def main(stdscr):
    jokes_admired = 0
    win_updates = 0
    height, width = stdscr.getmaxyx()
-   stats = curses.newwin(2, 20, height - 3, 1)
-
+   stats = curses.newwin(2, width, height - 2, 0)
+   curses.start_color()
+   curses.init_pair(1, curses.COLOR_BLACK, curses.COLOR_WHITE)
 
    curses.curs_set(0)
    current_row = 0
