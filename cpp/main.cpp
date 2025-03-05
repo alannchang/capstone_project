@@ -38,7 +38,7 @@ int main() {
         text("MaiMail " + MAIMAIL_VERSION) | center,
         separator(),
         menu->Render() | flex,
-        text(command_text),
+        paragraphAlignLeft(command_text),
         separator(),
         user_input->Render()
     });
