@@ -4,12 +4,10 @@ project(llama_cpp_backend)
 set(CMAKE_CXX_STANDARD 17)
 set(LLAMA_BUILD_COMMON On)
 
-add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/deps")
+add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp")
 
 add_executable(
         chat
-        # src/llm/LLMInference.cpp
-        # src/llm/main.cpp
         simple-chat.cpp
 )
 target_link_libraries(
@@ -17,16 +15,3 @@ target_link_libraries(
         PRIVATE
         common llama ggml
 )
-#[[ 
-add_executable(
-        chat-vision
-        src/vlm/VLMInference.cpp
-        src/vlm/main.cpp
-)
-
-target_link_libraries(
-        chat-vision
-        PRIVATE
-        common llama ggml
-)
-]]
