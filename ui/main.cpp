@@ -38,7 +38,7 @@ int main() {
     return vbox({
         text("MaiMail " + MAIMAIL_VERSION) | center,
         separator(),
-        menu->Render() | flex,
+        // menu->Render() | flex,
         paragraphAlignLeft(command_text) | flex | border,
         separator(),
         user_input->Render()

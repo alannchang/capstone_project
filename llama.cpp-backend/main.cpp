@@ -1,6 +1,15 @@
+// llama.cpp
 #include "LlamaInference.h"
 #include <iostream>
 #include <cstring>
+// FTXUI
+#include <ftxui/component/screen_interactive.hpp>
+#include <ftxui/component/component.hpp>
+#include <ftxui/dom/elements.hpp>
+
+using namespace ftxui;
+
+const std::string APP_VERSION = "v0.0.1";
 
 int main(int argc, char** argv) {
     if (argc < 2) {
@@ -39,9 +48,35 @@ int main(int argc, char** argv) {
         std::cerr << "Failed to initialize LlamaInference." << std::endl;
         return 1;
     }
-    
-    std::cout << "Model loaded successfully. Enter your messages (empty line to exit):" << std::endl;
-    
+
+    auto screen = ScreenInteractive::Fullscreen();
+    std::string response = "";
+    std::string user_prompt;
+    Component user_prompt_box = Input(&user_prompt, "Type prompt here (empty line to exit)") | border |
+        CatchEvent([&](Event event) {
+            if (event == Event::Return && !user_prompt.empty()) {
+                response = llama.chat(user_prompt, true);
+                return true;
+            }
+            return false;
+        });
+
+    auto container = Container::Vertical({
+        user_prompt_box
+    });
+
+    auto renderer = Renderer(container, [&] {
+      return vbox({
+          text("MaiMail " + APP_VERSION) | center,
+          separator(),
+          paragraphAlignLeft(response) | flex | border,
+          separator(),
+          user_prompt_box->Render()
+      });
+    });
+
+    screen.Loop(renderer);
+/*
     // Main chat loop
     while (true) {
         std::cout << "\033[32m> \033[0m";
@@ -57,6 +92,6 @@ int main(int argc, char** argv) {
         std::string response = llama.chat(user_input, true);
         std::cout << "\n\033[0m";
     }
-    
+*/  
     return 0;
 }
