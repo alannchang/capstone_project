@@ -53,8 +53,9 @@ int main(int argc, char** argv) {
         }
         
         std::cout << "\033[33m";
-        std::string response = llama.chat(user_input);
-        std::cout << response << "\n\033[0m";
+        // Enable streaming output by passing true
+        std::string response = llama.chat(user_input, true);
+        std::cout << "\n\033[0m";
     }
     
     return 0;

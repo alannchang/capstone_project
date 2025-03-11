@@ -1,10 +1,10 @@
-// LlamaInference.h
 #ifndef LLAMA_INFERENCE_H
 #define LLAMA_INFERENCE_H
 
 #include "llama.h"
 #include <string>
 #include <vector>
+#include <functional>
 
 class LlamaInference {
 public:
@@ -17,11 +17,17 @@ public:
     // Initialize the model, context, and sampler
     bool initialize();
     
-    // Generate a response for a given prompt
-    std::string generate(const std::string& prompt);
+    // Generate a response for a given prompt, with optional streaming
+    std::string generate(const std::string& prompt, bool stream_output = false);
     
-    // Chat functionality with message history
-    std::string chat(const std::string& user_message);
+    // Generate with a custom callback for each token
+    std::string generateWithCallback(
+        const std::string& prompt, 
+        std::function<void(const std::string&)> token_callback
+    );
+    
+    // Chat functionality with message history, with optional streaming
+    std::string chat(const std::string& user_message, bool stream_output = false);
     
     // Reset the chat history
     void resetChat();

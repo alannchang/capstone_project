@@ -1,8 +1,8 @@
-// LlamaInference.cpp
 #include "LlamaInference.h"
 #include <cstdio>
 #include <cstring>
 #include <iostream>
+#include <functional>
 
 LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size)
     : model_path_(model_path), n_gpu_layers_(n_gpu_layers), context_size_(context_size) {
@@ -57,7 +57,19 @@ bool LlamaInference::initialize() {
     return true;
 }
 
-std::string LlamaInference::generate(const std::string& prompt) {
+std::string LlamaInference::generate(const std::string& prompt, bool stream_output) {
+    return generateWithCallback(prompt, [stream_output](const std::string& piece) {
+        if (stream_output) {
+            printf("%s", piece.c_str());
+            fflush(stdout);
+        }
+    });
+}
+
+std::string LlamaInference::generateWithCallback(
+    const std::string& prompt, 
+    std::function<void(const std::string&)> token_callback
+) {
     std::string response;
     const bool is_first = llama_get_kv_cache_used_cells(ctx_) == 0;
     
@@ -104,6 +116,11 @@ std::string LlamaInference::generate(const std::string& prompt) {
         }
         
         std::string piece(buf, n);
+        
+        // Call the token callback with the new piece
+        token_callback(piece);
+        
+        // Add the piece to the full response
         response += piece;
         
         // Prepare the next batch with the sampled token
@@ -113,7 +130,7 @@ std::string LlamaInference::generate(const std::string& prompt) {
     return response;
 }
 
-std::string LlamaInference::chat(const std::string& user_message) {
+std::string LlamaInference::chat(const std::string& user_message, bool stream_output) {
     if (!model_ || !ctx_ || !sampler_) {
         fprintf(stderr, "model not initialized\n");
         return "";
@@ -138,8 +155,8 @@ std::string LlamaInference::chat(const std::string& user_message) {
     // Remove previous messages to obtain the prompt to generate the response
     std::string prompt(formatted_.begin() + prev_len_, formatted_.begin() + new_len);
     
-    // Generate a response
-    std::string response = generate(prompt);
+    // Generate a response with streaming if requested
+    std::string response = generate(prompt, stream_output);
     
     // Add the response to the messages
     messages_.push_back({"assistant", strdup(response.c_str())});
