@@ -56,6 +56,7 @@ int main(int argc, char** argv) {
         CatchEvent([&](Event event) {
             if (event == Event::Return && !user_prompt.empty()) {
                 response = llama.chat(user_prompt, true);
+                user_prompt.clear();
                 return true;
             }
             return false;
