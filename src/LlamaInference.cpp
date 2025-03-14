@@ -54,14 +54,54 @@ bool LlamaInference::initialize() {
     // Prepare chat history buffer
     formatted_.resize(context_size_);
     
+    // Initialize chat if system prompt is set
+    if (!system_prompt_.empty()) {
+        initializeChat();
+    }
+    
     return true;
 }
 
-std::string LlamaInference::generate(const std::string& prompt, bool stream_output) {
-    return generateWithCallback(prompt, [stream_output](const std::string& piece) {
+void LlamaInference::setSystemPrompt(const std::string& system_prompt) {
+    system_prompt_ = system_prompt;
+    
+    // Reset and initialize with the new system prompt if we're already initialized
+    if (model_ && ctx_) {
+        resetChat();
+        initializeChat();
+    }
+}
+
+void LlamaInference::initializeChat() {
+    if (system_prompt_.empty()) {
+        return;
+    }
+    
+    // Clear any existing messages first
+    for (auto& msg : messages_) {
+        free(const_cast<char*>(msg.content));
+    }
+    messages_.clear();
+    prev_len_ = 0;
+    
+    // Add system message to the beginning of the chat
+    messages_.push_back({"system", strdup(system_prompt_.c_str())});
+    
+    // Format the system message
+    const char* tmpl = llama_model_chat_template(model_, /* name */ nullptr);
+    prev_len_ = llama_chat_apply_template(tmpl, messages_.data(), messages_.size(), false, nullptr, 0);
+    
+    if (prev_len_ < 0) {
+        fprintf(stderr, "failed to apply chat template for system prompt\n");
+        prev_len_ = 0;
+    }
+}
+
+std::string LlamaInference::generate(const std::string& prompt, bool stream_output, std::string& output_string, std::function<void()> redraw_ui) {
+    return generateWithCallback(prompt, [stream_output, &output_string, redraw_ui](const std::string& piece) {
         if (stream_output) {
-            printf("%s", piece.c_str());
-            fflush(stdout);
+            output_string += piece;
+            redraw_ui();
         }
     });
 }
@@ -130,7 +170,8 @@ std::string LlamaInference::generateWithCallback(
     return response;
 }
 
-std::string LlamaInference::chat(const std::string& user_message, bool stream_output) {
+std::string LlamaInference::chat(const std::string& user_message, 
+    bool stream_output, std::string& output_string, std::function<void()> redraw_ui) {
     if (!model_ || !ctx_ || !sampler_) {
         fprintf(stderr, "model not initialized\n");
         return "";
@@ -156,7 +197,7 @@ std::string LlamaInference::chat(const std::string& user_message, bool stream_ou
     std::string prompt(formatted_.begin() + prev_len_, formatted_.begin() + new_len);
     
     // Generate a response with streaming if requested
-    std::string response = generate(prompt, stream_output);
+    std::string response = generate(prompt, stream_output, output_string, redraw_ui);
     
     // Add the response to the messages
     messages_.push_back({"assistant", strdup(response.c_str())});
@@ -178,6 +219,11 @@ void LlamaInference::resetChat() {
     
     messages_.clear();
     prev_len_ = 0;
+    
+    // Reinitialize with system prompt if set
+    if (!system_prompt_.empty()) {
+        initializeChat();
+    }
 }
 
 void LlamaInference::setContextSize(int n_ctx) {
@@ -195,6 +241,11 @@ void LlamaInference::setContextSize(int n_ctx) {
         ctx_params.n_ctx = context_size_;
         ctx_params.n_batch = context_size_;
         ctx_ = llama_init_from_model(model_, ctx_params);
+        
+        // Reinitialize chat with system prompt if needed
+        if (!system_prompt_.empty()) {
+            initializeChat();
+        }
     }
 }
 
@@ -203,8 +254,14 @@ void LlamaInference::setGpuLayers(int ngl) {
     n_gpu_layers_ = ngl;
     
     if (model_) {
+        std::string saved_system_prompt = system_prompt_;
         cleanup();
         initialize();
+        
+        // Restore system prompt if needed
+        if (!saved_system_prompt.empty()) {
+            setSystemPrompt(saved_system_prompt);
+        }
     }
 }
 

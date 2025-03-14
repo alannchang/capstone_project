@@ -6,12 +6,33 @@
 #include <ftxui/component/screen_interactive.hpp>
 #include <ftxui/component/component.hpp>
 #include <ftxui/dom/elements.hpp>
+// Thread support
+#include <thread>
+#include <atomic>
+#include <mutex>
 
 using namespace ftxui;
 
 const std::string APP_VERSION = "v0.0.1";
 
+std::mutex response_mutex;
+std::atomic<bool> is_streaming = false;
+std::string response = "";
+
+void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()> redraw) {
+    is_streaming = true;
+    llama.chat(prompt, true, response, redraw);
+    is_streaming = false;
+    redraw();
+}
+
+
 int main(int argc, char** argv) {
+
+    //
+    // Llama.cpp model setup/initialization
+    //
+
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " -m model.gguf [-c context_size] [-ngl n_gpu_layers]" << std::endl;
         return 1;
@@ -44,19 +65,36 @@ int main(int argc, char** argv) {
     
     // Create and initialize the LlamaInference object
     LlamaInference llama(model_path, ngl, n_ctx);
+
+    // Set a system prompt to control the model's behavior
+    llama.setSystemPrompt(
+        "You are a helpful AI assistant. Keep your responses concise, limited to 3-5 sentences maximum. "
+        "Be direct and to the point. Avoid lengthy explanations or introductions."
+    );
+
     if (!llama.initialize()) {
         std::cerr << "Failed to initialize LlamaInference." << std::endl;
         return 1;
     }
 
+    //
+    // UI Setup
+    //
+
     auto screen = ScreenInteractive::Fullscreen();
-    std::string response = "";
+
+    std::mutex response_mutex;
+    std::atomic<bool> is_streaming = false;
+
     std::string user_prompt;
-    Component user_prompt_box = Input(&user_prompt, "Type prompt here (empty line to exit)") | border |
+    Component user_prompt_box = Input(&user_prompt, "Type prompt here") | border |
         CatchEvent([&](Event event) {
-            if (event == Event::Return && !user_prompt.empty()) {
-                response = llama.chat(user_prompt, true);
+            if (event == Event::Return && !user_prompt.empty() && !is_streaming) {
+                std::string prompt_copy = user_prompt;
                 user_prompt.clear();
+                std::thread([&llama, prompt_copy, &screen]() {
+                    StreamChat(llama, prompt_copy, [&] { screen.PostEvent(Event::Custom); });
+                }).detach();
                 return true;
             }
             return false;
@@ -70,29 +108,12 @@ int main(int argc, char** argv) {
       return vbox({
           text("MaiMail " + APP_VERSION) | center,
           separator(),
-          paragraphAlignLeft(response) | flex | border,
+          paragraphAlignLeft(response) | yflex | vscroll_indicator | border,
           separator(),
           user_prompt_box->Render()
       });
     });
 
     screen.Loop(renderer);
-/*
-    // Main chat loop
-    while (true) {
-        std::cout << "\033[32m> \033[0m";
-        std::string user_input;
-        std::getline(std::cin, user_input);
-        
-        if (user_input.empty()) {
-            break;
-        }
-        
-        std::cout << "\033[33m";
-        // Enable streaming output by passing true
-        std::string response = llama.chat(user_input, true);
-        std::cout << "\n\033[0m";
-    }
-*/  
     return 0;
 }

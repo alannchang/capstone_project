@@ -17,8 +17,11 @@ public:
     // Initialize the model, context, and sampler
     bool initialize();
     
+    // Set system prompt to guide the model's behavior
+    void setSystemPrompt(const std::string& system_prompt);
+    
     // Generate a response for a given prompt, with optional streaming
-    std::string generate(const std::string& prompt, bool stream_output = false);
+    std::string generate(const std::string& prompt, bool stream_output, std::string& output_string, std::function<void()> redraw_ui);
     
     // Generate with a custom callback for each token
     std::string generateWithCallback(
@@ -27,9 +30,9 @@ public:
     );
     
     // Chat functionality with message history, with optional streaming
-    std::string chat(const std::string& user_message, bool stream_output = false);
+    std::string chat(const std::string& user_message, bool stream_output, std::string& output_string, std::function<void()> redraw_ui);
     
-    // Reset the chat history
+    // Reset the chat history (keeps system prompt)
     void resetChat();
     
     // Set parameters
@@ -41,6 +44,7 @@ private:
     std::string model_path_;
     int n_gpu_layers_;
     int context_size_;
+    std::string system_prompt_;
     
     // LLAMA resources
     llama_model* model_ = nullptr;
@@ -52,6 +56,9 @@ private:
     std::vector<llama_chat_message> messages_;
     std::vector<char> formatted_;
     int prev_len_ = 0;
+    
+    // Initialize chat with system prompt
+    void initializeChat();
     
     // Clean up resources
     void cleanup();
