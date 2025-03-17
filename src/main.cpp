@@ -90,6 +90,7 @@ int main(int argc, char** argv) {
     Component user_prompt_box = Input(&user_prompt, "Type prompt here") | border |
         CatchEvent([&](Event event) {
             if (event == Event::Return && !user_prompt.empty() && !is_streaming) {
+                response = "";
                 std::string prompt_copy = user_prompt;
                 user_prompt.clear();
                 std::thread([&llama, prompt_copy, &screen]() {
