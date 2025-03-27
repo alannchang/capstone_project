@@ -1,3 +1,8 @@
+# TermiMail
+venv
+credentials.json
+token.json
+
 ##### Windows
 # Windows thumbnail cache files
 Thumbs.db

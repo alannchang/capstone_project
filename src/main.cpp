@@ -109,7 +109,7 @@ int main(int argc, char** argv) {
       return vbox({
           text("MaiMail " + APP_VERSION) | center,
           separator(),
-          paragraphAlignLeft(response) | yflex | vscroll_indicator | border,
+          paragraphAlignLeft(response) | border,
           separator(),
           user_prompt_box->Render()
       });
