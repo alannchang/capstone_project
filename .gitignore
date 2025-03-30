@@ -1,5 +1,5 @@
 # TermiMail
-venv
+.venv
 credentials.json
 token.json
 
