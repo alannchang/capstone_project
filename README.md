@@ -99,5 +99,4 @@ Please note that this project is evolving — expect changes and improvements ov
 
 - [llama.cpp](https://github.com/ggml-org/llama.cpp)
 - [FTXUI](https://github.com/ArthurSonzogni/FTXUI)
-- [mlpack](https://github.com/mlpack/mlpack)
 - [Google Gmail API](https://developers.google.com/workspace/gmail/api/guides)
