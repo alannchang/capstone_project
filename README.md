@@ -1,26 +1,22 @@
-# InboxPilot (WIP)
+# ✉️ InboxPilot (WIP)
 
 **InboxPilot** is a local-first, privacy-respecting Gmail management application that combines a C++ TUI frontend, local LLM inference via `llama.cpp`, and reinforcement learning to automate and optimize your inbox workflows — all running fully on your machine.
 
 🚧 **Note: This project is currently a work in progress. Features and components may change significantly as development progresses.**
 
----
-
-## Overview
+## 🔍 Overview
 
 InboxPilot aims to intelligently manage your Gmail inbox based on your preferences and behavior. It learns over time using reinforcement learning (RL) and communicates decisions through a local LLM.
 
 **Key features in development:**
 
-- TUI-based email viewer and command console (FTXUI)
-- Local-only access to Gmail via OAuth2 (MCP server)
-- An RL agent that learns preferred actions (archive, label, delete, etc.)
-- LLM-generated summaries and explanations (llama.cpp)
-- A feedback loop: user confirms/overrides → model improves
+- ✅ TUI-based email viewer and command console (FTXUI)
+- ✅ Local-only access to Gmail via OAuth2 (MCP server)
+- 🧠 RL agent that learns preferred actions (archive, label, delete, etc.)
+- 🗣 LLM-generated summaries and explanations (llama.cpp)
+- 🔁 Feedback loop: user confirms/overrides → model improves
 
----
-
-## Architecture
+## 🧱 Architecture
 
 ```
 ┌────────────────────────────┐
@@ -66,7 +62,8 @@ LLM Engine            RL Agent
 
 ```
 
-## Components
+## 🧩 Components
+
 |Component|Description|Language|
 |---------|-----------|--------|
 |TUI Frontend|Rich terminal UI using FTXUI|C++|
@@ -75,7 +72,7 @@ LLM Engine            RL Agent
 |MCP Server|Manages Gmail API access and OAuth2|Python|
 |IPC Layer|Connects components via REST/gRPC/Unix sockets|C++ ↔ Python|
 
-## Learning Loop Example
+## 🔄 Learning Loop Example
 
 - New email arrives via MCP server.
 - LLM summarizes the message.
@@ -84,7 +81,7 @@ LLM Engine            RL Agent
 - User confirms or overrides the action; feedback is recorded.
 - RL policy updates for better future decisions.
 
-## Future Features (Planned)
+## 🧠 Future Features (Planned)
 
 - Offline training mode for the RL agent.
 - An undo stack for enhanced user control.
@@ -93,12 +90,12 @@ LLM Engine            RL Agent
 - User-specific profiles and customization.
 - Plugin-like API for extending LLM capabilities.
 
-## Development Status
+## 🛠 Development Status
 
 This is a very early-stage project.
 Please note that this project is evolving — expect changes and improvements over time.
 
-## Acknowledgments
+## 🙏 Acknowledgments
 
 - [llama.cpp](https://github.com/ggml-org/llama.cpp)
 - [FTXUI](https://github.com/ArthurSonzogni/FTXUI)
