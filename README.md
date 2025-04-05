@@ -1,36 +1,106 @@
+# InboxPilot (WIP)
+
+**InboxPilot** is a local-first, privacy-respecting Gmail management application that combines a C++ TUI frontend, local LLM inference via `llama.cpp`, and reinforcement learning to automate and optimize your inbox workflows — all running fully on your machine.
+
+🚧 **Note: This project is currently a work in progress. Features and components may change significantly as development progresses.**
+
+---
+
 ## Overview
 
-The goal of this open-source project is to develop a TUI-based AI-powered email manager that minimizes or eliminates the need for users to interact directly with their email inbox. By analyzing user behavior and email data, the program leverages machine learning techniques to predict user actions and prompt confirmations for handling incoming emails.
+InboxPilot aims to intelligently manage your Gmail inbox based on your preferences and behavior. It learns over time using reinforcement learning (RL) and communicates decisions through a local LLM.
 
-Key features include AI-generated email summaries, smart filtering based on user behavior, and automated email management. Over time, users can allow the program to handle emails autonomously without requiring confirmation.
+**Key features in development:**
 
-This application acts as a live "assistant" or "manager," helping users save time by reducing the need to manually check their email inbox. Customization is a core principle, allowing users to enable/disable features and install plugins for a tailored experience. The program runs locally, prioritizing user privacy by avoiding cloud services and telemetry.
+- TUI-based email viewer and command console (FTXUI)
+- Local-only access to Gmail via OAuth2 (MCP server)
+- An RL agent that learns preferred actions (archive, label, delete, etc.)
+- LLM-generated summaries and explanations (llama.cpp)
+- A feedback loop: user confirms/overrides → model improves
 
-## Features
+---
 
-- AI-generated email summaries using a model of the user’s choice
-- Advanced spam filtering based on user behavior
-- Logs for tracking program actions and troubleshooting
-- Customizable feature set with plugin support
-- Lightweight, locally-running application with no cloud dependencies
+## Architecture
 
-## Project Scope
+```
+┌────────────────────────────┐
+│      User (TUI)            │
+│   FTXUI-based C++ app      │
+└────────────┬───────────────┘
+             │
+             ▼
+┌────────────────────────────┐
+│    Core App Controller     │
+│     (C++, orchestrates)    │
+└────────────┬───────────────┘
+             │
+  ┌──────────┴─────────────┐
+  ▼                        ▼
+LLM Engine            RL Agent
+(llama.cpp)         (Q-learning/DQN)
+(Local inference)      (Learns prefs)
+  │                        ▲
+  └────┐            ┌──────┘
+       ▼            ▼
+  ┌────────────────────────────┐
+  │    Prompt Builder &        │
+  │ Decision Integrator (C++)  │
+  └────────┬────────┬──────────┘
+           │        │
+           ▼        ▼
+    LLM Summary   RL Decision
+           │        │
+           └────────┴────┐
+                        ▼
+               Final Suggested Action
+                        │
+                        ▼
+         ┌────────────────────────┐
+         │  MCP Server (Python)   │
+         │  - Gmail API + OAuth2  │
+         │  - JSON REST/IPC       │
+         └─────────┬──────────────┘
+                   │
+                   ▼
+         Gmail Inbox / Threads / Labels
 
-This project will be designed exclusively for Gmail accounts due to its extensive API support. The program aims to provide a seamless TUI-based experience, ensuring users never need to log into their gmail manually if the application functions as intended.
+```
 
-## Technical Implementation
+## Components
+|Component|Description|Language|
+|---------|-----------|--------|
+|TUI Frontend|Rich terminal UI using FTXUI|C++|
+|LLM Engine|LLM-based summarization and natural explanations|C/C++ (llama.cpp)|
+|RL Agent|Learns actions over time via reinforcement|C++ (mlpack) or Python|
+|MCP Server|Manages Gmail API access and OAuth2|Python|
+|IPC Layer|Connects components via REST/gRPC/Unix sockets|C++ ↔ Python|
 
-Primary Languages: Python (for MCP implementation), C/C++ (for llama.cpp and TUI interface)
-TUI Library: FTXUI
-Concurrency: At least two threads—one for monitoring email activity and another for UI interaction
-Minimal Dependencies: Keep external libraries to a minimum for a lightweight and user-friendly experience
+## Learning Loop Example
 
-## Development Goals
+- New email arrives via MCP server.
+- LLM summarizes the message.
+- RL agent suggests the best action based on learned behavior.
+- LLM builds a human-friendly explanation for the suggestion.
+- User confirms or overrides the action; feedback is recorded.
+- RL policy updates for better future decisions.
 
-Implement an AI-driven approach to categorize and manage emails based on user preferences
-Develop a responsive and efficient TUI for seamless user interaction
-Ensure complete privacy by keeping all data local
-Provide an extensible system with plugin support for enhanced functionality
+## Future Features (Planned)
 
-This README serves as a blueprint for the development of the TUI-based AI-powered email manager/assistant.
+- Offline training mode for the RL agent.
+- An undo stack for enhanced user control.
+- Advanced label suggestions based on email content.
+- Action preview mode before executing.
+- User-specific profiles and customization.
+- Plugin-like API for extending LLM capabilities.
 
+## Development Status
+
+This is a very early-stage project.
+Please note that this project is evolving — expect changes and improvements over time.
+
+## Acknowledgments
+
+- [llama.cpp](https://github.com/ggml-org/llama.cpp)
+- [FTXUI](https://github.com/ArthurSonzogni/FTXUI)
+- [mlpack](https://github.com/mlpack/mlpack)
+- [Google Gmail API](https://developers.google.com/workspace/gmail/api/guides)
