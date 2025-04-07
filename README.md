@@ -1,4 +1,4 @@
-# ✉️ InboxPilot (WIP)
+# ✉📬 InboxPilot (WIP, name subject to change)
 
 **InboxPilot** is a local-first, privacy-respecting Gmail management application that combines a C++ TUI frontend, local LLM inference via `llama.cpp`, and reinforcement learning to automate and optimize your inbox workflows — all running fully on your machine.
 
@@ -10,8 +10,8 @@ InboxPilot aims to intelligently manage your Gmail inbox based on your preferenc
 
 **Key features in development:**
 
-- ✅ TUI-based email viewer and command console (FTXUI)
-- ✅ Local-only access to Gmail via OAuth2 (MCP server)
+- 💻 TUI-based email viewer and command console (FTXUI)
+- 📁 Local-only access to Gmail via OAuth2 (MCP server)
 - 🧠 RL agent that learns preferred actions (archive, label, delete, etc.)
 - 🗣 LLM-generated summaries and explanations (llama.cpp)
 - 🔁 Feedback loop: user confirms/overrides → model improves
