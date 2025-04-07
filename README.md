@@ -1,4 +1,4 @@
-# ✉📬 InboxPilot (WIP, name subject to change)
+# 📬 InboxPilot (WIP, name subject to change)
 
 **InboxPilot** is a local-first, privacy-respecting Gmail management application that combines a C++ TUI frontend, local LLM inference via `llama.cpp`, and reinforcement learning to automate and optimize your inbox workflows — all running fully on your machine.
 
