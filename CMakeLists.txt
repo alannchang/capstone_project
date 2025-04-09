@@ -9,6 +9,8 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp")
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
 
 include(FetchContent)
+
+# FTXUI
 FetchContent_Declare(
     ftxui
     GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
@@ -16,17 +18,26 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(ftxui)
 
+# json
+FetchContent_Declare(
+    json 
+    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+)
+FetchContent_MakeAvailable(json)
+
 file(GLOB SRC_FILES "src/*.cpp")
 
 add_executable(
         chat
         ${SRC_FILES}
 )
+
 target_link_libraries(
         chat
         PRIVATE
         common llama ggml
         ftxui::screen ftxui::dom ftxui::component
+        nlohmann_json::nlohmann_json
 )
 
 target_include_directories(
