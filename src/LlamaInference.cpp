@@ -4,8 +4,12 @@
 #include <iostream>
 #include <functional>
 
-LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size)
-    : model_path_(model_path), n_gpu_layers_(n_gpu_layers), context_size_(context_size) {
+LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size, bool forward_to_mcp)
+    : model_path_(model_path), n_gpu_layers_(n_gpu_layers), context_size_(context_size), forward_to_mcp_(forward_to_mcp) {
+}
+
+bool LlamaInference::getForwardToMcp() const {
+    return forward_to_mcp_;
 }
 
 LlamaInference::~LlamaInference() {
@@ -209,6 +213,10 @@ std::string LlamaInference::chat(const std::string& user_message,
     }
     
     return response;
+}
+
+void LlamaInference::setForwardToMcp(bool forward_to_mcp) {
+    forward_to_mcp_ = forward_to_mcp;
 }
 
 void LlamaInference::resetChat() {

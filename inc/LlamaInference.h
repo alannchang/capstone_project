@@ -9,7 +9,7 @@
 class LlamaInference {
 public:
     // Constructor with configuration options
-    LlamaInference(const std::string& model_path, int n_gpu_layers = 99, int context_size = 2048);
+    LlamaInference(const std::string& model_path, bool forward_to_mcp = false, int n_gpu_layers = 99, int context_size = 2048);
     
     // Destructor to clean up resources
     ~LlamaInference();
@@ -37,6 +37,12 @@ public:
     
     // Set parameters
     void setContextSize(int n_ctx);
+    
+    bool isForwardToMcp() const;
+    
+    void setForwardToMcp(bool forward_to_mcp);
+    
+
     void setGpuLayers(int ngl);
     
 private:
@@ -44,6 +50,7 @@ private:
     std::string model_path_;
     int n_gpu_layers_;
     int context_size_;
+    bool forward_to_mcp_;
     std::string system_prompt_;
     
     // LLAMA resources
