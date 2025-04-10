@@ -25,6 +25,14 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(json)
 
+# httplib
+FetchContent_Declare(
+    httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG v0.15.3
+)
+
+FetchContent_MakeAvailable(httplib)
 file(GLOB SRC_FILES "src/*.cpp")
 
 add_executable(
@@ -38,6 +46,7 @@ target_link_libraries(
         common llama ggml
         ftxui::screen ftxui::dom ftxui::component
         nlohmann_json::nlohmann_json
+        httplib::httplib
 )
 
 target_include_directories(
