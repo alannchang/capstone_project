@@ -19,47 +19,47 @@ InboxPilot aims to intelligently manage your Gmail inbox based on your preferenc
 ## 🧱 Architecture
 
 ```
-┌────────────────────────────┐
-│      User (TUI)            │
-│   FTXUI-based C++ app      │
-└────────────┬───────────────┘
-             │
-             ▼
-┌────────────────────────────┐
-│    Core App Controller     │
-│     (C++, orchestrates)    │
-└────────────┬───────────────┘
-             │
-  ┌──────────┴─────────────┐
-  ▼                        ▼
-LLM Engine            RL Agent
-(llama.cpp)         (Q-learning/DQN)
-(Local inference)      (Learns prefs)
-  │                        ▲
-  └────┐            ┌──────┘
-       ▼            ▼
-  ┌────────────────────────────┐
-  │    Prompt Builder &        │
-  │ Decision Integrator (C++)  │
-  └────────┬────────┬──────────┘
-           │        │
-           ▼        ▼
-    LLM Summary   RL Decision
-           │        │
-           └────────┴────┐
-                        ▼
-               Final Suggested Action
-                        │
-                        ▼
-         ┌────────────────────────┐
-         │  MCP Server (Python)   │
-         │  - Gmail API + OAuth2  │
-         │  - JSON REST/IPC       │
-         └─────────┬──────────────┘
-                   │
-                   ▼
-         Gmail Inbox / Threads / Labels
-
+        ┌────────────────────────────┐
+        │      User (TUI)            │
+        │   FTXUI-based C++ app      │
+        └────────────┬───────────────┘
+                     │
+                     ▼
+        ┌────────────────────────────┐
+        │    Core App Controller     │
+        │     (C++, orchestrates)    │
+        └────────────┬───────────────┘
+                     │
+          ┌──────────┴─────────────┐
+          ▼                        ▼
+        LLM Engine            RL Agent
+        (llama.cpp)         (Q-learning/DQN)
+        (Local inference)      (Learns prefs)
+          │                        ▲
+          └────┐            ┌──────┘
+               ▼            ▼
+          ┌────────────────────────────┐
+          │    Prompt Builder &        │
+          │ Decision Integrator (C++)  │
+          └────────┬────────┬──────────┘
+                   │        │
+                   ▼        ▼
+            LLM Summary   RL Decision
+                   │        │
+                   └────────┴────┐
+                                ▼
+                       Final Suggested Action
+                                │
+                                ▼
+                 ┌────────────────────────┐
+                 │  MCP Server (Python)   │
+                 │  - Gmail API + OAuth2  │
+                 │  - JSON REST/IPC       │
+                 └─────────┬──────────────┘
+                           │
+                           ▼
+                 Gmail Inbox / Threads / Labels
+        
 ```
 
 ## 🧩 Components
@@ -101,6 +101,13 @@ https://www.googleapis.com/auth/gmail/readonly
 - Create an [OAuth Client ID](https://console.cloud.google.com/apis/credentials/oauthclient) for application type "Desktop App"
 - Download the JSON file of your client's OAuth keys, rename it to "credentials.json", and move it to the project directory.
 
+### Obtaining a model
+
+- Models can be obtained [here](https://huggingface.co/models?library=gguf&sort=trending).
+- Models in other data formats can be converted to GGUF using the convert_*.py Python scripts in the llama.cpp [repo](https://github.com/ggml-org/llama.cpp),
+which is also stored as a submodule in this project.
+- For more information on llama.cpp compatible models, please refer to [llama.cpp](https://github.com/ggml-org/llama.cpp).
+
 ### Building with Cmake
 ```
 git clone --recurse-submodules https://github.com/alannchang/capstone_project.git
@@ -108,11 +115,23 @@ cmake -B build
 cd build && make
 ```
 
-### Obtaining a model
+### Running the application
 
-Models can be obtained [here](https://huggingface.co/models?library=gguf&sort=trending).
-Models in other data formats can be converted to GGUF using the convert_*.py Python scripts in the llama.cpp [repo](https://github.com/ggml-org/llama.cpp),
-which is also stored as a submodule in this project.  For more information on llama.cpp compatible models, please refer to [llama.cpp](https://github.com/ggml-org/llama.cpp).
+After the previous steps have been completed, you can start running the application:
+
+#### Without MCP/RL support
+
+```
+./chat -m path/to/your/gguf/model
+```
+
+#### MCP support
+
+Currently in progress
+
+#### RL support
+
+Currently in progress
 
 ## 🧠 Future Features (Planned)
 
