@@ -81,6 +81,24 @@ LLM Engine            RL Agent
 - User confirms or overrides the action; feedback is recorded.
 - RL policy updates for better future decisions.
 
+
+## 🛠️ Setup
+
+Note: this application only works with Gmail accounts.
+
+### Gmail API Setup
+- Create a new [Google Cloud project](https://console.cloud.google.com/projectcreate)
+- Enable the [Gmail API](https://console.cloud.google.com/workspace-api/products)
+- Configure an [OAuth consent screen](https://console.cloud.google.com/apis/credentials/consent)
+    - Select "external" and add your gmail address as a "Test User" to allow API access.
+- Add the following OAuth scopes 
+    - https://www.googleapis.com/auth/gmail/send
+    - https://www.googleapis.com/auth/gmail/modify
+    - https://www.googleapis.com/auth/gmail/Labels
+    - https://www.googleapis.com/auth/gmail/readonly
+- Create an [OAuth Client ID](https://console.cloud.google.com/apis/credentials/oauthclient) for application type "Desktop App"
+- Download the JSON file of your client's OAuth keys, rename it to "credentials.json", and move it to the project directory.
+
 ## 🧠 Future Features (Planned)
 
 - Offline training mode for the RL agent.
