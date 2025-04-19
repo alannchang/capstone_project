@@ -11,6 +11,7 @@
 #include <atomic>
 #include <mutex>
 // pybind11
+#include <filesystem>
 #include <pybind11/embed.h>
 
 using namespace ftxui;
@@ -76,6 +77,26 @@ int main(int argc, char** argv) {
         std::cerr << "Failed to initialize LlamaInference." << std::endl;
         return 1;
     }
+
+    // Gmail API setup
+    pybind11::scoped_interpreter guard{};
+    
+    try {
+        // All this does is find the python script
+        std::filesystem::path script_path = std::filesystem::current_path() / "../gmail-api/";
+        script_path = std::filesystem::canonical(script_path);
+        pybind11::module_::import("sys").attr("path").attr("insert")(0, script_path.string());
+
+        pybind11::object api_module = pybind11::module_::import("api");
+
+        pybind11::object manager_class = api_module.attr("GmailManager");
+        pybind11::object api_manager = manager_class();
+        
+    } catch (const pybind11::error_already_set &e) {
+        std::cerr << "Python error: " << e.what() << std::endl;
+
+    }
+    
 
     // UI Setup
 
