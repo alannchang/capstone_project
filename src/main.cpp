@@ -10,6 +10,8 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
+// pybind11
+#include <pybind11/embed.h>
 
 using namespace ftxui;
 

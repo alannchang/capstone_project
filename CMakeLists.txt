@@ -10,6 +10,14 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
 
 include(FetchContent)
 
+# pybind11
+FetchContent_Declare(
+    pybind11
+    GIT_REPOSITORY https://github.com/pybind/pybind11.git
+    GIT_TAG v2.13.6
+)
+FetchContent_MakeAvailable(pybind11)
+
 # FTXUI
 FetchContent_Declare(
     ftxui
@@ -20,19 +28,12 @@ FetchContent_MakeAvailable(ftxui)
 
 # json
 FetchContent_Declare(
-    json 
-    URL https://github.com/nlohmann/json/releases/download/v3.11.3/json.tar.xz
+    json
+    GIT_REPOSITORY https://github.com/nlohmann/json.git
+    GIT_TAG v3.12.0
 )
 FetchContent_MakeAvailable(json)
 
-# httplib
-FetchContent_Declare(
-    httplib
-    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
-    GIT_TAG v0.15.3
-)
-
-FetchContent_MakeAvailable(httplib)
 file(GLOB SRC_FILES "src/*.cpp")
 
 add_executable(
@@ -46,7 +47,7 @@ target_link_libraries(
         common llama ggml
         ftxui::screen ftxui::dom ftxui::component
         nlohmann_json::nlohmann_json
-        httplib::httplib
+        pybind11::embed
 )
 
 target_include_directories(
