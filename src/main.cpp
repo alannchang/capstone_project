@@ -98,6 +98,11 @@ int main(int argc, char** argv) {
         pybind11::object GmailManager = api.attr("GmailManager");
         pybind11::object gmail = GmailManager(credentials_path, token_path);
 
+        // call get_profile()
+        pybind11::object profile = gmail.attr("get_profile")();
+        std::string profile_str = pybind11::str(profile);
+        std::cout << "Gmail Profile:\n" << profile_str << std::endl;
+
         
     } catch (const pybind11::error_already_set &e) {
         std::cerr << "Python error: " << e.what() << std::endl;
