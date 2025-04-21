@@ -1,4 +1,3 @@
-README.md
 api.py
 pyproject.toml
 api.egg-info/PKG-INFO

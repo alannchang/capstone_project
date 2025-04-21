@@ -79,18 +79,25 @@ int main(int argc, char** argv) {
     }
 
     // Gmail API setup
-    pybind11::scoped_interpreter guard{};
-    
     try {
-        // All this does is find the python script
-        std::filesystem::path script_path = std::filesystem::current_path() / "../gmail-api/";
-        script_path = std::filesystem::canonical(script_path);
-        pybind11::module_::import("sys").attr("path").attr("insert")(0, script_path.string());
+        pybind11::scoped_interpreter guard{};
 
-        pybind11::object api_module = pybind11::module_::import("api");
+        // get path to gmail-api directory
+        std::filesystem::path gmail_api_path = std::filesystem::canonical("../gmail-api");
 
-        pybind11::object manager_class = api_module.attr("GmailManager");
-        pybind11::object api_manager = manager_class();
+        // paths for credentials and token
+        std::string credentials_path = (gmail_api_path / "credentials.json").string();
+        std::string token_path = (gmail_api_path / "token.json").string();
+
+        // 
+        pybind11::module_ sys = pybind11::module_::import("sys");
+        sys.attr("path").attr("insert")(0, gmail_api_path.string());
+
+        // import api.py and create GmailManager instance
+        pybind11::object api = pybind11::module_::import("api");
+        pybind11::object GmailManager = api.attr("GmailManager");
+        pybind11::object gmail = GmailManager(credentials_path, token_path);
+
         
     } catch (const pybind11::error_already_set &e) {
         std::cerr << "Python error: " << e.what() << std::endl;
