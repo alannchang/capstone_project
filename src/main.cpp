@@ -70,12 +70,6 @@ int main(int argc, char** argv) {
     // Create and initialize the LlamaInference object
     LlamaInference llama(model_path, ngl, n_ctx);
 
-    // Set a system prompt to control the model's behavior
-    llama.setSystemPrompt(
-        "You are a helpful AI assistant. Keep your responses concise, limited to 3-5 sentences maximum. "
-        "Be direct and to the point. Avoid lengthy explanations or introductions."
-    );
-
     if (!llama.initialize()) {
         std::cerr << "Failed to initialize LlamaInference." << std::endl;
         return 1;
@@ -90,7 +84,15 @@ int main(int argc, char** argv) {
     nlohmann::json tool_schema;
     std::ifstream file("runtime-deps/tools.json");
     file >> tool_schema;
+
+    std::string tools_str = tool_schema.dump(2);
+    std::string tool_description = "The following tools are available:\n" + tools_str;
     
+    // Set a system prompt to control the model's behavior
+    llama.setSystemPrompt(
+        "Your job is to assist in managing the user's Gmail inbox.  Keep your responses concise, limited to 3-5 sentences maximum. "
+        "Be direct and to the point. Avoid lengthy explanations or introductions." + tool_description
+    );
 
     // UI Setup
 
