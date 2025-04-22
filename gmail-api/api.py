@@ -8,7 +8,7 @@ from googleapiclient.errors import HttpError
 from email.mime.text import MIMEText
 
 class GmailManager:
-    def __init__(self, credentials_path='credentials.json', token_path='token.json'):
+    def __init__(self, credentials_path='resources/credentials.json', token_path='resources/token.json'):
         """
         Initialize Gmail API service with OAuth 2.0 authentication
         

@@ -11,8 +11,11 @@
 #include <atomic>
 #include <mutex>
 // pybind11
-#include <filesystem>
 #include <pybind11/embed.h>
+#include "python_bindings.hpp"
+// json
+#include <nlohmann/json.hpp>
+#include <fstream>
 
 using namespace ftxui;
 
@@ -78,36 +81,16 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    // Gmail API setup
-    try {
-        pybind11::scoped_interpreter guard{};
+    // initialize Gmail api wrapper
+    pybind11::scoped_interpreter guard{};
+    GmailManagerWrapper gmail_mgr("resources/credentials.json", "resources/token.json");
 
-        // get path to gmail-api directory
-        std::filesystem::path gmail_api_path = std::filesystem::canonical("../gmail-api");
+    gmail_mgr.print_profile();
 
-        // paths for credentials and token
-        std::string credentials_path = (gmail_api_path / "credentials.json").string();
-        std::string token_path = (gmail_api_path / "token.json").string();
+    nlohmann::json tool_schema;
+    std::ifstream file("resources/tools.json");
+    file >> tool_schema;
 
-        // 
-        pybind11::module_ sys = pybind11::module_::import("sys");
-        sys.attr("path").attr("insert")(0, gmail_api_path.string());
-
-        // import api.py and create GmailManager instance
-        pybind11::object api = pybind11::module_::import("api");
-        pybind11::object GmailManager = api.attr("GmailManager");
-        pybind11::object gmail = GmailManager(credentials_path, token_path);
-
-        // call get_profile()
-        pybind11::object profile = gmail.attr("get_profile")();
-        std::string profile_str = pybind11::str(profile);
-        std::cout << "Gmail Profile:\n" << profile_str << std::endl;
-
-        
-    } catch (const pybind11::error_already_set &e) {
-        std::cerr << "Python error: " << e.what() << std::endl;
-
-    }
     
 
     // UI Setup

@@ -8,6 +8,11 @@ add_subdirectory("${CMAKE_CURRENT_SOURCE_DIR}/llama.cpp")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
 
+# Copy Gmail resources directory into build directory
+configure_file(${CMAKE_SOURCE_DIR}/gmail-api/resources/credentials.json ${CMAKE_BINARY_DIR}/resources/credentials.json COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/gmail-api/resources/token.json ${CMAKE_BINARY_DIR}/resources/token.json COPYONLY)
+configure_file(${CMAKE_SOURCE_DIR}/gmail-api/resources/tools.json ${CMAKE_BINARY_DIR}/resources/tools.json COPYONLY)
+
 include(FetchContent)
 
 # pybind11
