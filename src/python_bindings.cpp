@@ -7,11 +7,10 @@
 namespace py = pybind11;
 
 GmailManagerWrapper::GmailManagerWrapper(const std::string& credentials_path, const std::string& token_path) {
-    // Insert Gmail API directory to sys.path
-    std::filesystem::path gmail_api_path = std::filesystem::canonical("../gmail-api");
-
+    // set path
+    std::filesystem::path api_path = std::filesystem::current_path() / "runtime-deps";
     py::module_ sys = py::module_::import("sys");
-    sys.attr("path").attr("insert")(0, gmail_api_path.string());
+    sys.attr("path").attr("insert")(0, api_path.string());
 
     // Import Python GmailManager and instantiate it
     py::object api = py::module_::import("api");

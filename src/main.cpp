@@ -83,14 +83,13 @@ int main(int argc, char** argv) {
 
     // initialize Gmail api wrapper
     pybind11::scoped_interpreter guard{};
-    GmailManagerWrapper gmail_mgr("resources/credentials.json", "resources/token.json");
+    GmailManagerWrapper gmail_mgr("runtime-deps/credentials.json", "runtime-deps/token.json");
 
     gmail_mgr.print_profile();
 
     nlohmann::json tool_schema;
-    std::ifstream file("resources/tools.json");
+    std::ifstream file("runtime-deps/tools.json");
     file >> tool_schema;
-
     
 
     // UI Setup
