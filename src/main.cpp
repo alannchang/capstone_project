@@ -85,24 +85,24 @@ int main(int argc, char** argv) {
     std::ifstream file("runtime-deps/tools.json");
     file >> tool_schema;
 
-    std::string tools_str = tool_schema.dump(2);
-    std::string tool_description = "The following tools are available:\n" + tools_str;
+    std::string available_tools = tool_schema.dump(2);
     
-    // Set a system prompt to control the model's behavior
-    llama.setSystemPrompt(
-        "You are an email administrator. You have been granted special access to the user's Gmail account. You can read and send messages and make changes to labels.\n\n" +
-        tool_description +
-        "\n\nYou may use the tools to manage the inbox. When using a tool, return ONLY a JSON object that contains the tool name and its parameters. Do not say anything else. When simply talking to the user, respond normally in natural language.\n\n" 
-        "Example:\n"
-        "User: Please list today's unread emails.\n"
-        "Assistant: {\n"
-        "  \"tool\": \"list_unread_emails\",\n"
-        "  \"parameters\": {\n"
-        "    \"date\": \"today\"\n"
-        "  }\n"
-        "}\n"
-    );
+    // Insert user message separately later in the chat session
+    std::string task_instruction = R"(You have access to a set of tools. When using tools, make calls in a single JSON array: 
 
+    [{"name": "tool_call_name", "arguments": {"arg1": "value1", "arg2": "value2"}}, ... (additional parallel tool calls as needed)]
+
+    If no tool is suitable, state that explicitly. If the user's input lacks required parameters, ask for clarification. Do not interpret or respond until tool results are returned. Once they are available, process them or make additional calls if needed. For tasks that don't require tools, such as casual conversation or general advice, respond directly in plain text. The available tools are:)";
+
+    // Full system message with formatting
+    std::string system_prompt = 
+        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n" +
+        task_instruction + "\n\n" +
+        available_tools + 
+        "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
+
+    // Set a system prompt to control the model's behavior
+    llama.setSystemPrompt(system_prompt);
 
     // UI Setup
 
@@ -116,10 +116,10 @@ int main(int argc, char** argv) {
         CatchEvent([&](Event event) {
             if (event == Event::Return && !user_prompt.empty() && !is_streaming) {
                 response = "";
-                std::string prompt_copy = user_prompt;
+                std::string combined_prompt = system_prompt + user_prompt + "\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n";
                 user_prompt.clear();
-                std::thread([&llama, prompt_copy, &screen]() {
-                    StreamChat(llama, prompt_copy, [&] { screen.PostEvent(Event::Custom); });
+                std::thread([&llama, combined_prompt, &screen]() {
+                    StreamChat(llama, combined_prompt, [&] { screen.PostEvent(Event::Custom); });
                 }).detach();
                 return true;
             }
