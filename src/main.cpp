@@ -35,8 +35,6 @@ void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()>
 
 int main(int argc, char** argv) {
 
-    // Llama.cpp model setup/initialization
-
     if (argc < 2) {
         std::cout << "Usage: " << argv[0] << " -m model.gguf [-c context_size] [-ngl n_gpu_layers]" << std::endl;
         return 1;
@@ -66,20 +64,12 @@ int main(int argc, char** argv) {
         std::cout << "Model path is required." << std::endl;
         return 1;
     }
-    
-    // Create and initialize the LlamaInference object
-    LlamaInference llama(model_path, ngl, n_ctx);
-
-    if (!llama.initialize()) {
-        std::cerr << "Failed to initialize LlamaInference." << std::endl;
-        return 1;
-    }
 
     // initialize Gmail api wrapper
     pybind11::scoped_interpreter guard{};
     GmailManagerWrapper gmail_mgr("runtime-deps/credentials.json", "runtime-deps/token.json");
 
-    gmail_mgr.print_profile();
+    response = "Gmail Authorization Successful\n" + gmail_mgr.get_profile_str(gmail_mgr.get_profile());
 
     nlohmann::json tool_schema;
     std::ifstream file("runtime-deps/tools.json");
@@ -101,8 +91,16 @@ int main(int argc, char** argv) {
         available_tools + 
         "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
 
+    // Create and initialize the LlamaInference object
+    LlamaInference llama(model_path, ngl, n_ctx);
+
     // Set a system prompt to control the model's behavior
     llama.setSystemPrompt(system_prompt);
+
+    if (!llama.initialize()) {
+        std::cerr << "Failed to initialize LlamaInference." << std::endl;
+        return 1;
+    }
 
     // UI Setup
 

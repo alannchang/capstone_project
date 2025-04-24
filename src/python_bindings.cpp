@@ -19,10 +19,20 @@ GmailManagerWrapper::GmailManagerWrapper(const std::string& credentials_path, co
     gmail = GmailManager(credentials_path, token_path);
 }
 
-void GmailManagerWrapper::print_profile() const {
+py::object GmailManagerWrapper::get_profile() const {
     py::object profile = gmail.attr("get_profile")();
-    std::cout << "Gmail Profile:\n" << std::string(py::str(profile)) << std::endl;
+    return profile;
 }
+
+std::string GmailManagerWrapper::get_profile_str(py::object profile) {
+    std::string profile_stats = "";
+    profile_stats += "Gmail Account: " + profile["emailAddress"].cast<std::string>() + "\n";
+    // profile_stats += "Total Messages: " + profile["messagesTotal"].cast<std::string>() + "\n";
+    // profile_stats += "Total Threads: " + profile["threadsTotal"].cast<int>() + "\n";
+    // profile_stats += "History ID: " + profile["historyID"].cast<int>() + "\n";
+    return profile_stats;
+}
+
 
 py::object& GmailManagerWrapper::get_instance() {
     return gmail;
