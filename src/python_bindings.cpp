@@ -27,9 +27,11 @@ py::object GmailManagerWrapper::get_profile() const {
 std::string GmailManagerWrapper::get_profile_str(py::object profile) {
     std::string profile_stats = "";
     profile_stats += "Gmail Account: " + profile["emailAddress"].cast<std::string>() + "\n";
-    // profile_stats += "Total Messages: " + profile["messagesTotal"].cast<std::string>() + "\n";
-    // profile_stats += "Total Threads: " + profile["threadsTotal"].cast<int>() + "\n";
-    // profile_stats += "History ID: " + profile["historyID"].cast<int>() + "\n";
+
+    // int message_total = profile["messagesTotal"].cast<int32_t>();
+    // int thread_total = profile["threadsTotal"].cast<int32_t>();
+    // int history_id = profile["historyId"].cast<int32_t>();
+    // profile_stats += "Message Total: " + std::to_string(message_total);
     return profile_stats;
 }
 

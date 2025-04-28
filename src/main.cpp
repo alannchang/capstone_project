@@ -32,6 +32,11 @@ void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()>
     redraw();
 }
 
+int parseModelResponse() {
+
+    return 0;
+}
+
 
 int main(int argc, char** argv) {
 
@@ -78,7 +83,7 @@ int main(int argc, char** argv) {
     std::string available_tools = tool_schema.dump(2);
     
     // Insert user message separately later in the chat session
-    std::string task_instruction = R"(You have access to a set of tools. When using tools, make calls in a single JSON array: 
+    std::string task_instruction = R"(You are an assistant that manages a Gmail inbox.  You have access to a set of tools. When using tools, make calls in a single JSON array: 
 
     [{"name": "tool_call_name", "arguments": {"arg1": "value1", "arg2": "value2"}}, ... (additional parallel tool calls as needed)]
 
@@ -86,10 +91,11 @@ int main(int argc, char** argv) {
 
     // Full system message with formatting
     std::string system_prompt = 
-        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n" +
-        task_instruction + "\n\n" +
-        available_tools + 
-        "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
+        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n" 
+        + task_instruction 
+        + "\n\n" 
+        + available_tools 
+        + "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
 
     // Create and initialize the LlamaInference object
     LlamaInference llama(model_path, ngl, n_ctx);
