@@ -17,6 +17,8 @@
 #include <nlohmann/json.hpp>
 #include <fstream>
 
+#include "tool_manager.hpp"
+
 using namespace ftxui;
 
 const std::string APP_VERSION = "v0.0.1";
@@ -45,7 +47,7 @@ int main(int argc, char** argv) {
         return 1;
     }
     
-    // Parse command line arguments
+    // parse command line arguments
     std::string model_path;
     int ngl = 99;
     int n_ctx = 2048;
@@ -76,20 +78,24 @@ int main(int argc, char** argv) {
 
     response = "Gmail Authorization Successful\n" + gmail_mgr.get_profile_str(gmail_mgr.get_profile());
 
+    // load tools from json file
     nlohmann::json tool_schema;
     std::ifstream file("runtime-deps/tools.json");
     file >> tool_schema;
 
-    std::string available_tools = tool_schema.dump(2);
-    
-    // Insert user message separately later in the chat session
+    // initialize tool manager
+    ToolManager tool_manager;
+    tool_manager.register_gmail_tools(gmail_mgr.get_instance());
+ 
+    // build system prompt
     std::string task_instruction = R"(You are an assistant that manages a Gmail inbox.  You have access to a set of tools. When using tools, make calls in a single JSON array: 
 
     [{"name": "tool_call_name", "arguments": {"arg1": "value1", "arg2": "value2"}}, ... (additional parallel tool calls as needed)]
 
     If no tool is suitable, state that explicitly. If the user's input lacks required parameters, ask for clarification. Do not interpret or respond until tool results are returned. Once they are available, process them or make additional calls if needed. For tasks that don't require tools, such as casual conversation or general advice, respond directly in plain text. The available tools are:)";
 
-    // Full system message with formatting
+    std::string available_tools = tool_schema.dump(2);
+
     std::string system_prompt = 
         "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n" 
         + task_instruction 
@@ -97,10 +103,10 @@ int main(int argc, char** argv) {
         + available_tools 
         + "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
 
-    // Create and initialize the LlamaInference object
+    // initialize LlamaInference object
     LlamaInference llama(model_path, ngl, n_ctx);
 
-    // Set a system prompt to control the model's behavior
+    // Set system prompt
     llama.setSystemPrompt(system_prompt);
 
     if (!llama.initialize()) {
