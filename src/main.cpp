@@ -27,10 +27,19 @@ std::mutex response_mutex;
 std::atomic<bool> is_streaming = false;
 std::string response = "";
 
-void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()> redraw) {
+
+void StreamChat(LlamaInference& llama, ToolManager& tool_manager, std::string prompt, std::function<void()> redraw) {
     is_streaming = true;
-    llama.chat(prompt, true, response, redraw);
-    is_streaming = false;
+    while (is_streaming) {
+        llama.chat(prompt, true, response, redraw);
+        std::optional<std::string> tool_result = tool_manager.handle_tool_call(response);
+
+        if (tool_result.has_value()) {
+            prompt = tool_result.value();
+        } else {
+            is_streaming = false;
+        }
+    }
     redraw();
 }
 
@@ -88,7 +97,7 @@ int main(int argc, char** argv) {
     tool_manager.register_gmail_tools(gmail_mgr.get_instance());
  
     // build system prompt
-    std::string task_instruction = R"(You are an assistant that manages a Gmail inbox.  You have access to a set of tools. When using tools, make calls in a single JSON array: 
+    std::string task_instruction = R"(You are an assistant that manages a Gmail inbox.  You have access to a set of tools. When using tools, make calls in a single JSON array (DO NOT USE MARKDOWN): 
 
     [{"name": "tool_call_name", "arguments": {"arg1": "value1", "arg2": "value2"}}, ... (additional parallel tool calls as needed)]
 
@@ -97,11 +106,11 @@ int main(int argc, char** argv) {
     std::string available_tools = tool_schema.dump(2);
 
     std::string system_prompt = 
-        "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n" 
-        + task_instruction 
+        // "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n" 
+        task_instruction 
         + "\n\n" 
-        + available_tools 
-        + "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
+        + available_tools; 
+        // + "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
 
     // initialize LlamaInference object
     LlamaInference llama(model_path, ngl, n_ctx);
@@ -126,10 +135,10 @@ int main(int argc, char** argv) {
         CatchEvent([&](Event event) {
             if (event == Event::Return && !user_prompt.empty() && !is_streaming) {
                 response = "";
-                std::string combined_prompt = system_prompt + user_prompt + "\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n";
+                std::string combined_prompt = system_prompt + user_prompt /*+ "\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"*/;
                 user_prompt.clear();
-                std::thread([&llama, combined_prompt, &screen]() {
-                    StreamChat(llama, combined_prompt, [&] { screen.PostEvent(Event::Custom); });
+                std::thread([&llama, &tool_manager, combined_prompt, &screen]() {
+                    StreamChat(llama, tool_manager, combined_prompt, [&] { screen.PostEvent(Event::Custom); });
                 }).detach();
                 return true;
             }

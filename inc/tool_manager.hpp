@@ -4,6 +4,7 @@
 #include <pybind11/embed.h>
 #include <nlohmann/json.hpp>
 #include <string>
+#include <iostream>
 #include <unordered_map>
 #include <functional>
 
@@ -17,6 +18,8 @@ public:
 
     void register_tool(const std::string& name, ToolHandler handler);
 
+    std::optional<std::string> handle_tool_call(const std::string& model_output);   
+    
     py::object call_tool(const std::string& name, const nlohmann::json& args) const;
 
     bool has_tool(const std::string& name) const;
