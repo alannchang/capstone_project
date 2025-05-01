@@ -30,22 +30,22 @@ std::string response = "";
 
 void StreamChat(LlamaInference& llama, ToolManager& tool_manager, std::string prompt, std::function<void()> redraw) {
     is_streaming = true;
-    while (is_streaming) {
+
+    while (1) {
         llama.chat(prompt, true, response, redraw);
         std::optional<std::string> tool_result = tool_manager.handle_tool_call(response);
 
         if (tool_result.has_value()) {
+            response += "\ntool calling in process...\n";
             prompt = tool_result.value();
+            redraw();
         } else {
-            is_streaming = false;
+            response += "\nTOOL NOT CALLED\n";
+            break;
         }
     }
+    is_streaming = false;
     redraw();
-}
-
-int parseModelResponse() {
-
-    return 0;
 }
 
 

@@ -7,6 +7,8 @@
 #include <iostream>
 #include <unordered_map>
 #include <functional>
+#include <sstream>
+#include <fstream>
 
 namespace py = pybind11;
 
@@ -25,6 +27,8 @@ public:
     bool has_tool(const std::string& name) const;
 
     void register_gmail_tools(py::object gmail_manager);
+    
+    void log_debug(const std::string& message) const;
 
 private:
 

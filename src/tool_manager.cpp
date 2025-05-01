@@ -19,8 +19,11 @@ bool ToolManager::has_tool(const std::string& name) const {
 }
 
 std::optional<std::string> ToolManager::handle_tool_call(const std::string& model_output) {
+    log_debug("Raw model output: " + model_output);
+
     nlohmann::json output_json = nlohmann::json::parse(model_output, nullptr, false);
     if (output_json.is_discarded() || !output_json.is_array()) {
+        log_debug("Invalid tool call format.");
         std::cerr << "Invalid tool call format." << std::endl;
         return std::nullopt;
     }
@@ -30,20 +33,26 @@ std::optional<std::string> ToolManager::handle_tool_call(const std::string& mode
     for (const auto& tool_call : output_json) {
         std::string name = tool_call["name"];
         nlohmann::json args = tool_call["arguments"];
+        log_debug("Handling tool: " + name + " with args: " + args.dump());
 
         if (tools_.count(name)) {
             try {
                 py::object tool_result = tools_[name](args);
                 py::str result_str = py::str(tool_result);
                 aggregated_result << "Result from " << name << ": " << result_str.cast<std::string>() << "\n";
+                log_debug("Success: Tool '" + name + "' returned: " + result_str.cast<std::string>());
+            } catch (const py::error_already_set& e) {
+                aggregated_result << "Python error from " << name << ": " << e.what() << "\n";
+                log_debug("Python error in '" + name + "': " + std::string(e.what()));
             } catch (const std::exception& e) {
-                aggregated_result << "Error from " << name << ": " << e.what() << "\n";
+                std::cout << "\nError from " << name << ": " << e.what() << "\n";
+                log_debug("C++ error in '" + name + "': " + std::string(e.what()));
             }
         } else {
             aggregated_result << "Unknown tool: " << name << "\n";
+            log_debug("Unknown tool: " + name);
         }
     }
-
     return aggregated_result.str();
 }
 
@@ -66,4 +75,8 @@ void ToolManager::register_gmail_tools(py::object gmail_manager) {
 
 }
 
+void ToolManager::log_debug(const std::string& message) const {
+    std::ofstream log_file("tool_debug.log", std::ios::app);
+    log_file << message << std::endl;
+}
 
