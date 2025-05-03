@@ -20,11 +20,13 @@ GmailManagerWrapper::GmailManagerWrapper(const std::string& credentials_path, co
 }
 
 py::object GmailManagerWrapper::get_profile() const {
+    py::gil_scoped_acquire gil;
     py::object profile = gmail.attr("get_profile")();
     return profile;
 }
 
 std::string GmailManagerWrapper::get_profile_str(py::object profile) {
+    py::gil_scoped_acquire gil;
     std::string profile_stats = "";
     profile_stats += "Gmail Account: " + profile["emailAddress"].cast<std::string>() + "\n";
 
@@ -37,6 +39,7 @@ std::string GmailManagerWrapper::get_profile_str(py::object profile) {
 
 
 py::object& GmailManagerWrapper::get_instance() {
+    py::gil_scoped_acquire gil;
     return gmail;
 }
 

@@ -19,6 +19,7 @@ bool ToolManager::has_tool(const std::string& name) const {
 }
 
 std::optional<std::string> ToolManager::handle_tool_call(const std::string& model_output) {
+    py::gil_scoped_acquire gil;
     log_debug("Raw model output: " + model_output);
 
     nlohmann::json output_json = nlohmann::json::parse(model_output, nullptr, false);
@@ -36,8 +37,12 @@ std::optional<std::string> ToolManager::handle_tool_call(const std::string& mode
         log_debug("Handling tool: " + name + " with args: " + args.dump());
 
         if (tools_.count(name)) {
+            log_debug("[DEBUG] tools_.count(name) reached");
             try {
+                log_debug("[DEBUG] Calling Python tool: " + name);
                 py::object tool_result = tools_[name](args);
+                log_debug("[DEBUG] Tool call completed.");
+
                 py::str result_str = py::str(tool_result);
                 aggregated_result << "Result from " << name << ": " << result_str.cast<std::string>() << "\n";
                 log_debug("Success: Tool '" + name + "' returned: " + result_str.cast<std::string>());
@@ -57,20 +62,25 @@ std::optional<std::string> ToolManager::handle_tool_call(const std::string& mode
 }
 
 void ToolManager::register_gmail_tools(py::object gmail_manager) {
-    register_tool("get_profile", [=](const nlohmann::json&) {
+    register_tool("get_profile", [&](const nlohmann::json&) {
+        py::gil_scoped_acquire gil;
         return gmail_manager.attr("get_profile")();
     });
 
-    register_tool("send_message", [=](const nlohmann::json& args) {
+    register_tool("send_message", [&](const nlohmann::json& args) {
+        py::gil_scoped_acquire gil;
         return gmail_manager.attr("send_message")(
             args.at("to"), args.at("subject"), args.at("body")
         );
     });
     
-    register_tool("list_messages", [=](const nlohmann::json& args) {
-        return gmail_manager.attr("list_messages")(
-            args.at("query"), args.at("max_results")
-        );
+    register_tool("list_messages", [&](const nlohmann::json& args) {
+        py::gil_scoped_acquire gil;
+        log_debug("[DEBUG] Entering list_messages tool");
+        std::string query = args.at("query").get<std::string>();
+        int max_results = args.at("max_results").get<int>();
+        return gmail_manager.attr("list_messages")(query, max_results);
+        log_debug("[DEBUG] list_messages returned from Python");
     });
 
 }

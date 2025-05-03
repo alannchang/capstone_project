@@ -32,22 +32,44 @@ void StreamChat(LlamaInference& llama, ToolManager& tool_manager, std::string pr
     is_streaming = true;
 
     while (1) {
+        response.clear();
         llama.chat(prompt, true, response, redraw);
-        std::optional<std::string> tool_result = tool_manager.handle_tool_call(response);
+        std::string raw_output = response;
+
+        auto tool_result = tool_manager.handle_tool_call(raw_output);
 
         if (tool_result.has_value()) {
-            response += "\ntool calling in process...\n";
+            response += "\n\n[Tool Calling in progress... Please wait.]\n";
             prompt = tool_result.value();
-            redraw();
         } else {
-            response += "\nTOOL NOT CALLED\n";
             break;
         }
+        redraw();
     }
     is_streaming = false;
     redraw();
 }
 
+void test_tool_directly(ToolManager& tool_manager) {
+    std::string test_json = R"([
+        {
+            "name": "list_messages",
+            "arguments": {
+                "max_results": 2,
+                "query": "is:unread"
+            }
+        }
+    ])";
+
+    std::cerr << "[TEST] Calling handle_tool_call()...\n";
+    auto result = tool_manager.handle_tool_call(test_json);
+
+    if (result.has_value()) {
+        std::cerr << "[TEST] Tool call succeeded. Result:\n" << result.value() << std::endl;
+    } else {
+        std::cerr << "[TEST] Tool call failed or returned no value.\n";
+    }
+}
 
 int main(int argc, char** argv) {
 
@@ -95,6 +117,7 @@ int main(int argc, char** argv) {
     // initialize tool manager
     ToolManager tool_manager;
     tool_manager.register_gmail_tools(gmail_mgr.get_instance());
+    // test_tool_directly(tool_manager);
  
     // build system prompt
     std::string task_instruction = R"(You are an assistant that manages a Gmail inbox.  You have access to a set of tools. When using tools, make calls in a single JSON array (DO NOT USE MARKDOWN): 
