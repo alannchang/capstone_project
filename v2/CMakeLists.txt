@@ -98,12 +98,11 @@ target_link_libraries(chat
 #         gmail_manager_lib
 # )
 
-# Tests - commented out for now
-# if(BUILD_TESTS)
-#     enable_testing()
-#     find_package(GTest REQUIRED)
-#     add_subdirectory(test)
-# endif()
+# Tests
+if(BUILD_TESTS)
+    enable_testing()
+    add_subdirectory(test)
+endif()
 
 # Future dependencies to be added:
 # - pybind11 for Python integration
