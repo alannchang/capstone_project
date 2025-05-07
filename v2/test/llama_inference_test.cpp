@@ -13,7 +13,7 @@ protected:
             std::cout << "Using model from LLAMA_TEST_MODEL: " << model_path_env << std::endl;
             model_path = model_path_env;
         } else {
-            model_path = "../../../models/Llama-3.2-3B-Instruct-Q6_K.gguf";
+            model_path = "../../../../gguf-models/Llama-3.2-3B-Instruct-Q6_K.gguf";
             std::cout << "LLAMA_TEST_MODEL not set, looking for model at: " 
                       << std::filesystem::absolute(model_path).string() << std::endl;
         }
