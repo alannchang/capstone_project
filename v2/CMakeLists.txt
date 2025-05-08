@@ -1,12 +1,15 @@
 cmake_minimum_required(VERSION 3.14)
-project(gmail_manager_v2 VERSION 0.1.0
-    DESCRIPTION "Gmail Manager with LLM Integration - Version 2"
+project(llama_inference_v2 VERSION 0.1.0
+    DESCRIPTION "LLama Inference Engine - Version 2"
     LANGUAGES CXX)
 
 # Set C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
+
+# Always build with position-independent code
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # Basic options
 option(BUILD_TESTS "Build test suite" ON)
@@ -19,6 +22,27 @@ option(LLAMA_OPENBLAS "Enable OpenBLAS support" OFF)
 
 # Include FetchContent for llama.cpp
 include(FetchContent)
+
+# Fetch fmt library first (needed by spdlog)
+FetchContent_Declare(
+    fmt
+    GIT_REPOSITORY https://github.com/fmtlib/fmt.git
+    GIT_TAG 10.0.0  # Use a stable version compatible with spdlog
+    CMAKE_ARGS
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+)
+FetchContent_MakeAvailable(fmt)
+
+# Fetch spdlog
+FetchContent_Declare(
+    spdlog
+    GIT_REPOSITORY https://github.com/gabime/spdlog.git
+    GIT_TAG v1.12.0  # Use latest stable version
+    CMAKE_ARGS 
+        -DSPDLOG_FMT_EXTERNAL=ON
+        -DCMAKE_POSITION_INDEPENDENT_CODE=ON
+)
+FetchContent_MakeAvailable(spdlog)
 
 # Fetch llama.cpp
 FetchContent_Declare(
@@ -59,11 +83,11 @@ if(ENABLE_WARNINGS)
 endif()
 
 # Main library
-add_library(gmail_manager_lib
+add_library(llama_inference_lib
     src/LlamaInference.cpp
 )
 
-target_include_directories(gmail_manager_lib
+target_include_directories(llama_inference_lib
     PUBLIC
         $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
         $<INSTALL_INTERFACE:include>
@@ -72,9 +96,11 @@ target_include_directories(gmail_manager_lib
 )
 
 # Link with llama.cpp
-target_link_libraries(gmail_manager_lib
+target_link_libraries(llama_inference_lib
     PRIVATE
         llama
+        fmt::fmt
+        spdlog::spdlog
 )
 
 # Chat executable
@@ -84,18 +110,20 @@ add_executable(chat
 
 target_link_libraries(chat
     PRIVATE
-        gmail_manager_lib
+        llama_inference_lib
         llama
+        fmt::fmt
+        spdlog::spdlog
 )
 
 # Other executables - commented out for now
-# add_executable(gmail_manager_v2
+# add_executable(llama_inference_v2
 #     src/main.cpp
 # )
 # 
-# target_link_libraries(gmail_manager_v2
+# target_link_libraries(llama_inference_v2
 #     PRIVATE
-#         gmail_manager_lib
+#         llama_inference_lib
 # )
 
 # Tests
@@ -111,8 +139,8 @@ endif()
 
 # Installation - commented out for now
 # include(GNUInstallDirs)
-# install(TARGETS gmail_manager_v2 gmail_manager_lib
-#     EXPORT gmail_manager_targets
+# install(TARGETS llama_inference_v2 llama_inference_lib
+#     EXPORT llama_inference_targets
 #     RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
 #     LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
 #     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}

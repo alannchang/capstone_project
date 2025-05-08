@@ -2,6 +2,7 @@
 #define LLAMA_INFERENCE_H
 
 #include "llama.h"
+#include "Logger.h"
 #include <string>
 #include <vector>
 #include <functional>

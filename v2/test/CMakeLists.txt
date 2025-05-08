@@ -19,8 +19,10 @@ add_executable(llama_inference_test
 # Link against our library and GTest
 target_link_libraries(llama_inference_test
     PRIVATE
-        gmail_manager_lib
+        llama_inference_lib
         llama
+        fmt::fmt
+        spdlog::spdlog
         GTest::gtest_main
         GTest::gmock
 )
