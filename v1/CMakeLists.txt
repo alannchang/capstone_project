@@ -1,11 +1,8 @@
-cmake_minimum_required(VERSION 3.10)
+cmake_minimum_required(VERSION 3.14)
 project(MaiMail)
 
 set(CMAKE_CXX_STANDARD 17)
-set(LLAMA_BUILD_COMMON ON)
-
-# ───── Subdirectories ──────────────────────────────────────
-add_subdirectory(llama.cpp)
+set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
 # ───── Include Paths ───────────────────────────────────────
 include_directories(${CMAKE_CURRENT_SOURCE_DIR}/inc)
@@ -16,6 +13,19 @@ file(COPY ${CMAKE_SOURCE_DIR}/gmail-api/runtime-deps/ DESTINATION ${CMAKE_BINARY
 
 # ───── Dependencies via FetchContent ───────────────────────
 include(FetchContent)
+
+# Fetch llama.cpp
+FetchContent_Declare(
+    llama_cpp
+    GIT_REPOSITORY https://github.com/ggerganov/llama.cpp.git
+    GIT_TAG c392e50  # Pinned to specific commit (same as was in submodule)
+)
+
+# Configure llama.cpp build options
+set(LLAMA_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_SERVER OFF CACHE BOOL "" FORCE)
+set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
 
 FetchContent_Declare(
     ftxui
@@ -35,7 +45,7 @@ FetchContent_Declare(
     GIT_TAG v2.13.6
 )
 
-FetchContent_MakeAvailable(ftxui json pybind11)
+FetchContent_MakeAvailable(llama_cpp ftxui json pybind11)
 
 # ───── Sources ─────────────────────────────────────────────
 file(GLOB SRC_FILES src/*.cpp)

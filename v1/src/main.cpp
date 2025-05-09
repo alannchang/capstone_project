@@ -28,47 +28,11 @@ std::atomic<bool> is_streaming = false;
 std::string response = "";
 
 
-void StreamChat(LlamaInference& llama, ToolManager& tool_manager, std::string prompt, std::function<void()> redraw) {
+void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()> redraw) {
     is_streaming = true;
-
-    while (1) {
-        response.clear();
-        llama.chat(prompt, true, response, redraw);
-        std::string raw_output = response;
-
-        auto tool_result = tool_manager.handle_tool_call(raw_output);
-
-        if (tool_result.has_value()) {
-            response += "\n\n[Tool Calling in progress... Please wait.]\n";
-            prompt = tool_result.value();
-        } else {
-            break;
-        }
-        redraw();
-    }
+    llama.chat(prompt, true, response, redraw);
     is_streaming = false;
     redraw();
-}
-
-void test_tool_directly(ToolManager& tool_manager) {
-    std::string test_json = R"([
-        {
-            "name": "list_messages",
-            "arguments": {
-                "max_results": 2,
-                "query": "is:unread"
-            }
-        }
-    ])";
-
-    std::cerr << "[TEST] Calling handle_tool_call()...\n";
-    auto result = tool_manager.handle_tool_call(test_json);
-
-    if (result.has_value()) {
-        std::cerr << "[TEST] Tool call succeeded. Result:\n" << result.value() << std::endl;
-    } else {
-        std::cerr << "[TEST] Tool call failed or returned no value.\n";
-    }
 }
 
 int main(int argc, char** argv) {
@@ -102,23 +66,11 @@ int main(int argc, char** argv) {
         std::cout << "Model path is required." << std::endl;
         return 1;
     }
-
-    // initialize Gmail api wrapper
-    pybind11::scoped_interpreter guard{};
-    GmailManagerWrapper gmail_mgr("runtime-deps/credentials.json", "runtime-deps/token.json");
-
-    response = "Gmail Authorization Successful\n" + gmail_mgr.get_profile_str(gmail_mgr.get_profile());
-
     // load tools from json file
     nlohmann::json tool_schema;
     std::ifstream file("runtime-deps/tools.json");
     file >> tool_schema;
-
-    // initialize tool manager
-    ToolManager tool_manager;
-    tool_manager.register_gmail_tools(gmail_mgr.get_instance());
-    // test_tool_directly(tool_manager);
- 
+/* 
     // build system prompt
     std::string task_instruction = R"(You are an assistant that manages a Gmail inbox.  You have access to a set of tools. When using tools, make calls in a single JSON array (DO NOT USE MARKDOWN): 
 
@@ -134,7 +86,8 @@ int main(int argc, char** argv) {
         + "\n\n" 
         + available_tools; 
         // + "\n<|eot_id|><|start_header_id|>user<|end_header_id|>\n";
-
+*/
+    std::string system_prompt = "You are a helpful assistant.";
     // initialize LlamaInference object
     LlamaInference llama(model_path, ngl, n_ctx);
 
@@ -153,15 +106,15 @@ int main(int argc, char** argv) {
     std::mutex response_mutex;
     std::atomic<bool> is_streaming = false;
 
-    std::string user_prompt;
-    Component user_prompt_box = Input(&user_prompt, "Type prompt here") | border |
+    std::string prompt;
+    Component user_prompt_box = Input(&prompt, "Type prompt here") | border |
         CatchEvent([&](Event event) {
-            if (event == Event::Return && !user_prompt.empty() && !is_streaming) {
+            if (event == Event::Return && !prompt.empty() && !is_streaming) {
                 response = "";
-                std::string combined_prompt = system_prompt + user_prompt /*+ "\n<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n"*/;
-                user_prompt.clear();
-                std::thread([&llama, &tool_manager, combined_prompt, &screen]() {
-                    StreamChat(llama, tool_manager, combined_prompt, [&] { screen.PostEvent(Event::Custom); });
+                std::string _prompt = prompt;
+                prompt.clear();
+                std::thread([&llama, _prompt, &screen]() {
+                    StreamChat(llama, _prompt, [&] { screen.PostEvent(Event::Custom); });
                 }).detach();
                 return true;
             }
