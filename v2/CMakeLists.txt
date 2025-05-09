@@ -44,6 +44,18 @@ FetchContent_Declare(
 )
 FetchContent_MakeAvailable(spdlog)
 
+# Fetch FTXUI (Terminal UI Library)
+FetchContent_Declare(
+    ftxui
+    GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
+    GIT_TAG v4.1.1  # Use stable version
+    CMAKE_ARGS
+        -DFTXUI_BUILD_DOCS=OFF
+        -DFTXUI_BUILD_EXAMPLES=OFF
+        -DFTXUI_BUILD_TESTS=OFF
+)
+FetchContent_MakeAvailable(ftxui)
+
 # Fetch llama.cpp
 FetchContent_Declare(
     llama_cpp
@@ -116,6 +128,27 @@ target_link_libraries(chat
         spdlog::spdlog
 )
 
+# Terminal UI Chat executable
+add_executable(llm-ui
+    src/terminal_ui.cpp
+)
+
+# Disable dangling-reference warning for the terminal UI component
+if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
+    target_compile_options(llm-ui PRIVATE -Wno-dangling-reference)
+endif()
+
+target_link_libraries(llm-ui
+    PRIVATE
+        llama_inference_lib
+        llama
+        fmt::fmt
+        spdlog::spdlog
+        ftxui::screen
+        ftxui::dom
+        ftxui::component
+)
+
 # Other executables - commented out for now
 # add_executable(llama_inference_v2
 #     src/main.cpp
@@ -135,7 +168,6 @@ endif()
 # Future dependencies to be added:
 # - pybind11 for Python integration
 # - nlohmann_json for JSON handling
-# - FTXUI for the terminal UI
 
 # Installation - commented out for now
 # include(GNUInstallDirs)

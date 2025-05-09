@@ -15,6 +15,14 @@ public:
         static Logger instance;
         return instance;
     }
+    
+    // Static convenience method for initializing the logger
+    static void init(const std::string& loggerName = "llama_app", 
+                    bool consoleOutput = false,
+                    spdlog::level::level_enum level = spdlog::level::info) {
+        std::string logFile = "logs/" + loggerName + ".log";
+        getInstance().init(loggerName, logFile, consoleOutput, level);
+    }
 
     void init(const std::string& loggerName = "llama_app", 
               const std::string& logFile = "logs/llama_app.log",
