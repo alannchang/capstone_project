@@ -30,7 +30,7 @@ set(LLAMA_BUILD_COMMON ON CACHE BOOL "" FORCE)
 FetchContent_Declare(
     ftxui
     GIT_REPOSITORY https://github.com/ArthurSonzogni/FTXUI
-    GIT_TAG v6.0.2
+    GIT_TAG v6.1.9
 )
 
 FetchContent_Declare(

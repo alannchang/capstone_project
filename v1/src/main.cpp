@@ -26,12 +26,75 @@ const std::string APP_VERSION = "v0.0.1";
 std::mutex response_mutex;
 std::atomic<bool> is_streaming = false;
 std::string response = "";
+std::string current_streaming_text = ""; // Track the currently streaming text separately
 
+// Improved function to wrap long lines to a specific width without breaking words
+std::vector<std::string> wrapText(const std::string& text, int width) {
+    std::vector<std::string> result;
+    std::istringstream iss(text);
+    std::string line;
+    
+    while (std::getline(iss, line)) {
+        std::string current_line;
+        std::istringstream word_stream(line);
+        std::string word;
+        
+        while (word_stream >> word) {
+            // If this is the first word in the line or adding this word won't exceed width
+            if (current_line.empty()) {
+                current_line = word;
+            } else if (current_line.length() + word.length() + 1 <= width) {
+                current_line += " " + word;
+            } else {
+                // Line would be too long, push it and start a new one
+                result.push_back(current_line);
+                current_line = word;
+            }
+        }
+        
+        // Don't forget the last line
+        if (!current_line.empty()) {
+            result.push_back(current_line);
+        }
+        
+        // If the original line was empty, preserve it
+        if (line.empty()) {
+            result.push_back("");
+        }
+    }
+    
+    return result;
+}
+
+// Function to track if we should auto-scroll
+bool shouldAutoScroll(int scroll_offset, int max_scroll, bool was_at_bottom) {
+    // Auto-scroll if we're streaming and either:
+    // 1. We were already at the bottom before new content arrived
+    // 2. We've never scrolled manually (scroll_offset == 0)
+    return is_streaming && (was_at_bottom || scroll_offset == 0);
+}
+
+// Extract the last few tokens from a string
+std::string getLastPartOfString(const std::string& text, int numChars) {
+    if (text.length() <= numChars) {
+        return text;
+    }
+    return text.substr(text.length() - numChars);
+}
 
 void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()> redraw) {
     is_streaming = true;
-    llama.chat(prompt, true, response, redraw);
+    current_streaming_text = ""; // Reset streaming display
+    
+    // Use a callback that updates both the full response and the current streaming part
+    llama.chat(prompt, true, response, [&redraw]() {
+        // Update the current streaming text to show the most recent portion
+        current_streaming_text = getLastPartOfString(response, 200);
+        redraw();
+    });
+    
     is_streaming = false;
+    current_streaming_text = ""; // Clear streaming display when done
     redraw();
 }
 
@@ -100,39 +163,173 @@ int main(int argc, char** argv) {
     }
 
     // UI Setup
-
     auto screen = ScreenInteractive::Fullscreen();
 
     std::mutex response_mutex;
     std::atomic<bool> is_streaming = false;
 
-    std::string prompt;
-    Component user_prompt_box = Input(&prompt, "Type prompt here") | border |
-        CatchEvent([&](Event event) {
-            if (event == Event::Return && !prompt.empty() && !is_streaming) {
-                response = "";
-                std::string _prompt = prompt;
-                prompt.clear();
-                std::thread([&llama, _prompt, &screen]() {
-                    StreamChat(llama, _prompt, [&] { screen.PostEvent(Event::Custom); });
-                }).detach();
-                return true;
-            }
-            return false;
-        });
+    // Scrolling state
+    int scroll_offset = 0;
+    const int page_size = 10; // How many lines to scroll on page up/down
+    bool user_scrolled = false; // Track if user has manually scrolled
+    bool was_at_bottom = true;  // Track if we were at the bottom before new content
 
+    std::string prompt;
+    
+    // Text input component for user input
+    Component user_prompt_box = Input(&prompt, "Type prompt here") | border;
+    
+    // Container for both components
     auto container = Container::Vertical({
+        Renderer([&]{
+            // Placeholder for the response area
+            return text("Loading...");
+        }),
         user_prompt_box
     });
 
+    // Event handling
+    container = container | CatchEvent([&](Event event) {
+        // Handle scrolling events
+        if (event == Event::ArrowUp) {
+            if (scroll_offset > 0) {
+                scroll_offset--;
+                user_scrolled = true;
+                screen.PostEvent(Event::Custom);
+                return true;
+            }
+        } else if (event == Event::ArrowDown) {
+            // Will check bounds in the renderer
+            scroll_offset++;
+            user_scrolled = true;
+            screen.PostEvent(Event::Custom);
+            return true;
+        } else if (event == Event::PageUp) {
+            scroll_offset = std::max(0, scroll_offset - page_size);
+            user_scrolled = true;
+            screen.PostEvent(Event::Custom);
+            return true;
+        } else if (event == Event::PageDown) {
+            scroll_offset += page_size;
+            user_scrolled = true;
+            screen.PostEvent(Event::Custom);
+            return true;
+        }
+        
+        // Handle input submission
+        if (event == Event::Return && !prompt.empty() && !is_streaming) {
+            response = "";
+            scroll_offset = 0; // Reset scroll position
+            user_scrolled = false; // Reset user scroll state
+            was_at_bottom = true;  // Reset bottom tracking
+            std::string _prompt = prompt;
+            prompt.clear();
+            
+            std::thread([&llama, _prompt, &screen]() {
+                StreamChat(llama, _prompt, [&] { 
+                    screen.PostEvent(Event::Custom);
+                });
+            }).detach();
+            
+            return true;
+        }
+        
+        return false;
+    });
+
     auto renderer = Renderer(container, [&] {
-      return vbox({
-          text("MaiMail " + APP_VERSION) | center,
-          separator(),
-          paragraphAlignLeft(response) | yflex | border,
-          separator(),
-          user_prompt_box->Render()
-      });
+        // Get terminal size
+        auto size = Terminal::Size();
+        int width = size.dimx - 6; // Account for borders and some padding
+        
+        // For history area, use all but 5 lines (2 for streaming, 1 for separator, 2 for padding)
+        int history_height = size.dimy - 13; // Adjusted to make room for streaming area
+        
+        // Create wrapped lines for scrolling from the full response
+        std::vector<std::string> history_lines = wrapText(response, width);
+        
+        // Adjust scroll bounds for history area
+        int max_scroll = std::max(0, static_cast<int>(history_lines.size()) - history_height);
+        
+        // If not streaming, auto-scroll to bottom of history
+        if (!is_streaming && (!user_scrolled || was_at_bottom)) {
+            scroll_offset = max_scroll;
+        }
+        
+        // Ensure scroll_offset is within bounds
+        scroll_offset = std::min(scroll_offset, max_scroll);
+        scroll_offset = std::max(0, scroll_offset);
+        
+        // Save whether we're at the bottom for next update
+        was_at_bottom = (scroll_offset >= max_scroll - 1);
+        
+        // Select visible portion of history lines
+        Element history_display;
+        if (history_lines.empty()) {
+            history_display = text(" ");
+        } else {
+            std::vector<Element> visible_elements;
+            for (int i = scroll_offset; i < scroll_offset + history_height && i < static_cast<int>(history_lines.size()); i++) {
+                visible_elements.push_back(text(history_lines[i]));
+            }
+            history_display = vbox(visible_elements);
+        }
+        
+        // Create scroll info
+        std::string scroll_info = "";
+        if (history_lines.size() > history_height) {
+            std::stringstream ss;
+            ss << "[" << (scroll_offset + 1) << "-" 
+               << std::min(scroll_offset + history_height, static_cast<int>(history_lines.size())) 
+               << "/" << history_lines.size() << "]";
+            scroll_info = ss.str();
+        }
+        
+        // Prepare the streaming area display
+        Element streaming_area;
+        if (is_streaming) {
+            // Wrap the current streaming text
+            std::vector<std::string> streaming_lines = wrapText(current_streaming_text, width);
+            
+            // If we have more than 2 lines, take just the last 2
+            if (streaming_lines.size() > 2) {
+                streaming_lines = {
+                    streaming_lines[streaming_lines.size() - 2],
+                    streaming_lines[streaming_lines.size() - 1]
+                };
+            }
+            
+            // Create the streaming display area
+            std::vector<Element> streaming_elements;
+            for (const auto& line : streaming_lines) {
+                streaming_elements.push_back(text(line));
+            }
+            
+            // Ensure we have exactly 2 lines (pad with empty if needed)
+            while (streaming_elements.size() < 2) {
+                streaming_elements.push_back(text(""));
+            }
+            
+            streaming_area = vbox({
+                separator(),
+                text("  🔴 Streaming...") | color(Color::Red),
+                vbox(streaming_elements) | border
+            });
+        } else {
+            // No streaming area when not streaming
+            streaming_area = filler();
+        }
+        
+        // Basic layout with history, streaming indicator, and input
+        return vbox({
+            text("MaiMail " + APP_VERSION) | center,
+            separator(),
+            history_display | border | flex,
+            scroll_info.empty() ? filler() : text(scroll_info) | center,
+            streaming_area,
+            separator(),
+            user_prompt_box->Render()
+        });
     });
 
     screen.Loop(renderer);
