@@ -82,7 +82,7 @@ std::string getLastPartOfString(const std::string& text, int numChars) {
     return text.substr(text.length() - numChars);
 }
 
-void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()> redraw) {
+void StreamChat(LlamaInference& llama, bool user_scrolled, std::string prompt, std::function<void()> redraw) {
     is_streaming = true;
     current_streaming_text = ""; // Reset streaming display
     
@@ -94,6 +94,7 @@ void StreamChat(LlamaInference& llama, std::string prompt, std::function<void()>
     });
     
     is_streaming = false;
+    user_scrolled = false; // Snap history to bottom on stream completion
     current_streaming_text = ""; // Clear streaming display when done
     redraw();
 }
@@ -172,7 +173,6 @@ int main(int argc, char** argv) {
     int scroll_offset = 0;
     const int page_size = 10; // How many lines to scroll on page up/down
     bool user_scrolled = false; // Track if user has manually scrolled
-    bool was_at_bottom = true;  // Track if we were at the bottom before new content
 
     std::string prompt;
     
@@ -190,30 +190,32 @@ int main(int argc, char** argv) {
 
     // Event handling
     container = container | CatchEvent([&](Event event) {
-        // Handle scrolling events
-        if (event == Event::ArrowUp) {
-            if (scroll_offset > 0) {
-                scroll_offset--;
+        // Only handle scrolling events if not streaming
+        if (!is_streaming) {
+            if (event == Event::ArrowUp) {
+                if (scroll_offset > 0) {
+                    scroll_offset--;
+                    user_scrolled = true;
+                    screen.PostEvent(Event::Custom);
+                    return true;
+                }
+            } else if (event == Event::ArrowDown) {
+                // Will check bounds in the renderer
+                scroll_offset++;
+                user_scrolled = true;
+                screen.PostEvent(Event::Custom);
+                return true;
+            } else if (event == Event::PageUp) {
+                scroll_offset = std::max(0, scroll_offset - page_size);
+                user_scrolled = true;
+                screen.PostEvent(Event::Custom);
+                return true;
+            } else if (event == Event::PageDown) {
+                scroll_offset += page_size;
                 user_scrolled = true;
                 screen.PostEvent(Event::Custom);
                 return true;
             }
-        } else if (event == Event::ArrowDown) {
-            // Will check bounds in the renderer
-            scroll_offset++;
-            user_scrolled = true;
-            screen.PostEvent(Event::Custom);
-            return true;
-        } else if (event == Event::PageUp) {
-            scroll_offset = std::max(0, scroll_offset - page_size);
-            user_scrolled = true;
-            screen.PostEvent(Event::Custom);
-            return true;
-        } else if (event == Event::PageDown) {
-            scroll_offset += page_size;
-            user_scrolled = true;
-            screen.PostEvent(Event::Custom);
-            return true;
         }
         
         // Handle input submission
@@ -221,12 +223,11 @@ int main(int argc, char** argv) {
             response = "";
             scroll_offset = 0; // Reset scroll position
             user_scrolled = false; // Reset user scroll state
-            was_at_bottom = true;  // Reset bottom tracking
             std::string _prompt = prompt;
             prompt.clear();
             
-            std::thread([&llama, _prompt, &screen]() {
-                StreamChat(llama, _prompt, [&] { 
+            std::thread([&llama, user_scrolled, _prompt, &screen]() {
+                StreamChat(llama, user_scrolled, _prompt, [&] { 
                     screen.PostEvent(Event::Custom);
                 });
             }).detach();
@@ -251,17 +252,14 @@ int main(int argc, char** argv) {
         // Adjust scroll bounds for history area
         int max_scroll = std::max(0, static_cast<int>(history_lines.size()) - history_height);
         
-        // If not streaming, auto-scroll to bottom of history
-        if (!is_streaming && (!user_scrolled || was_at_bottom)) {
+        // Auto-scroll to bottom of history if user hasn't manually scrolled
+        if (!user_scrolled) {
             scroll_offset = max_scroll;
         }
         
         // Ensure scroll_offset is within bounds
         scroll_offset = std::min(scroll_offset, max_scroll);
         scroll_offset = std::max(0, scroll_offset);
-        
-        // Save whether we're at the bottom for next update
-        was_at_bottom = (scroll_offset >= max_scroll - 1);
         
         // Select visible portion of history lines
         Element history_display;
