@@ -1,0 +1,43 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# V1 Future Improvements
+
+Based on [v1_analysis.md](mdc:v1_analysis.md), these are the planned improvements for completing a fully functional V1.
+
+## High Priority Fixes
+
+1. **Python Integration**
+   - Fix Python.h include issue
+   - Complete or remove Gmail integration functionality
+   - Resolve Python binding stability issues
+
+2. **Project Focus**
+   - Clarify whether project is a general chat app or Gmail assistant
+   - Consolidate project naming (MaiMail vs InboxPilot)
+   - Decide on the final feature set for v1
+
+3. **Error Handling**
+   - Add robust error handling throughout codebase
+   - Improve user feedback for errors
+   - Implement graceful fallbacks for operational failures
+
+## Feature Additions
+
+1. **User Experience Enhancements**
+   - Add loading indicators for model initialization
+   - Implement command history for reusing prompts
+   - Create settings configuration UI
+   - Add help menu and keyboard shortcut documentation
+
+2. **Memory Management**
+   - Replace raw pointers with smart pointers
+   - Implement proper cleanup of resources
+   - Add memory usage monitoring
+
+3. **Documentation**
+   - Add unit tests for critical components
+   - Create detailed API documentation
+   - Write comprehensive user guide

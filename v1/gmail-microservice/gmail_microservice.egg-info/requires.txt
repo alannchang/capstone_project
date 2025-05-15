@@ -1,0 +1,13 @@
+fastapi[standard]
+uvicorn
+google-auth-oauthlib
+google-auth-httplib2
+google-api-python-client
+python-multipart
+pydantic[email]
+
+[test]
+pytest
+httpx
+pytest-mock
+pytest-asyncio

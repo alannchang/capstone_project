@@ -1,0 +1,23 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# V1 Architecture Overview
+
+The V1 codebase implements a terminal-based LLM chat application with potential Gmail integration.
+
+## Core Components
+
+- Main entry point: [v1/src/main.cpp](mdc:v1/src/main.cpp) - Implements the TUI and application flow
+- LLM Interface: [v1/src/LlamaInference.cpp](mdc:v1/src/LlamaInference.cpp) and [v1/inc/LlamaInference.h](mdc:v1/inc/LlamaInference.h) - Handles model loading and inference
+- Tool Management: [v1/src/tool_manager.cpp](mdc:v1/src/tool_manager.cpp) and [v1/inc/tool_manager.hpp](mdc:v1/inc/tool_manager.hpp) - Framework for tool calls
+- Python Bindings: [v1/src/python_bindings.cpp](mdc:v1/src/python_bindings.cpp) and [v1/inc/python_bindings.hpp](mdc:v1/inc/python_bindings.hpp) - Gmail API integration
+
+## Build System
+- CMake configuration: [v1/CMakeLists.txt](mdc:v1/CMakeLists.txt) - Manages dependencies and build targets
+
+## Project Documentation
+- Project overview: [v1/README.md](mdc:v1/README.md) - Contains goals and architecture
+- Analysis document: [v1_analysis.md](mdc:v1_analysis.md) - Detailed analysis of codebase issues
+

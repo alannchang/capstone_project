@@ -1,0 +1,8 @@
+gmail_service.py
+pyproject.toml
+gmail_microservice.egg-info/PKG-INFO
+gmail_microservice.egg-info/SOURCES.txt
+gmail_microservice.egg-info/dependency_links.txt
+gmail_microservice.egg-info/requires.txt
+gmail_microservice.egg-info/top_level.txt
+tests/test_gmail_service.py

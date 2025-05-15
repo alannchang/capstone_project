@@ -1,0 +1,35 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# V1 Known Code Issues
+
+The following are known issues in the V1 codebase that should be considered when making changes.
+
+## Critical Issues
+
+1. **Python Integration Problems**
+   - Python.h cannot be found (linter error in main.cpp)
+   - Gmail API integration is incomplete and partially commented out
+
+2. **Memory Management Issues**
+   - Raw pointers and C-style memory allocation (strdup) in LlamaInference.cpp
+   - Potential memory leaks in tool_manager.cpp and message handling
+
+3. **Project Identity**
+   - Project is named "MaiMail" in CMakeLists.txt but "InboxPilot" in README.md
+   - Codebase contains both general chat functionality and Gmail-specific code
+
+## UI Implementation
+
+- UI layout uses hardcoded values that may not work well on all terminal sizes
+- No progress indicators for model loading or other long operations
+- Limited keyboard shortcut support
+
+## Tool Management
+
+- Tool execution framework exists but error handling is minimal
+- Debug logging uses hardcoded file paths
+- Tool parsing doesn't handle all LLM output formats
+

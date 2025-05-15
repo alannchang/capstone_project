@@ -1,0 +1,38 @@
+---
+description: 
+globs: 
+alwaysApply: false
+---
+# V1 LLM Integration
+
+The V1 codebase uses llama.cpp for local LLM inference. This rule documents how the LLM is integrated and used.
+
+## LlamaInference Core
+
+The [LlamaInference class](mdc:v1/inc/LlamaInference.h) is the primary interface to the LLM:
+
+- Model loading and initialization happens in `initialize()`
+- Text generation occurs in `generate()` and `generateWithCallback()`
+- Chat functionality with history is managed by `chat()`
+- System prompt is set via `setSystemPrompt()`
+
+## Key LLM Functions
+
+- **Tokenization**: Uses `llama_tokenize()` to convert text to tokens
+- **Inference**: Uses `llama_decode()` to process batches of tokens
+- **Sampling**: Uses `llama_sampler_sample()` to generate new tokens
+- **Template Handling**: Uses `llama_chat_apply_template()` for chat formatting
+
+## Chat History Management
+
+- Chat history is stored as `llama_chat_message` objects in the `messages_` vector
+- Context window management is basic with risk of exceeding context size
+- No persistence of chat history between sessions
+
+## Streaming Implementation
+
+The streaming UI updates happen through:
+1. `StreamChat()` function in [main.cpp](mdc:v1/src/main.cpp)
+2. Callback functions passed to `generateWithCallback()`
+3. UI redraw triggered via `redraw()` after each token
+
