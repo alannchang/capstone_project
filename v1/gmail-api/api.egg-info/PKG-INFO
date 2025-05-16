@@ -1,9 +1,0 @@
-Metadata-Version: 2.4
-Name: api
-Version: 0.1.0
-Summary: Add your description here
-Requires-Python: >=3.13
-Description-Content-Type: text/markdown
-Requires-Dist: google-auth-oauthlib
-Requires-Dist: google-auth-httplib2
-Requires-Dist: google-api-python-client

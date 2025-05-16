@@ -40,12 +40,12 @@ FetchContent_Declare(
 )
 
 FetchContent_Declare(
-    pybind11
-    GIT_REPOSITORY https://github.com/pybind/pybind11.git
-    GIT_TAG v2.13.6
+    httplib
+    GIT_REPOSITORY https://github.com/yhirose/cpp-httplib.git
+    GIT_TAG v0.15.3 # Use a recent stable tag
 )
 
-FetchContent_MakeAvailable(llama_cpp ftxui json pybind11)
+FetchContent_MakeAvailable(llama_cpp ftxui json httplib)
 
 # ───── Sources ─────────────────────────────────────────────
 file(GLOB SRC_FILES src/*.cpp)
@@ -57,7 +57,7 @@ target_link_libraries(chat PRIVATE
     common llama ggml
     ftxui::screen ftxui::dom ftxui::component
     nlohmann_json::nlohmann_json
-    pybind11::embed
+    httplib::httplib # Link cpp-httplib (it's header only but good practice to list)
 )
 
 target_include_directories(chat PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
