@@ -10,14 +10,9 @@
 #include <thread>
 #include <atomic>
 #include <mutex>
-// pybind11
-#include <pybind11/embed.h>
-#include "python_bindings.hpp"
 // json
 #include <nlohmann/json.hpp>
 #include <fstream>
-
-#include "tool_manager.hpp"
 
 using namespace ftxui;
 
@@ -131,9 +126,11 @@ int main(int argc, char** argv) {
         return 1;
     }
     // load tools from json file
+    /*
     nlohmann::json tool_schema;
     std::ifstream file("runtime-deps/tools.json");
     file >> tool_schema;
+    */
 /* 
     // build system prompt
     std::string task_instruction = R"(You are an assistant that manages a Gmail inbox.  You have access to a set of tools. When using tools, make calls in a single JSON array (DO NOT USE MARKDOWN): 

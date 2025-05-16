@@ -1,7 +1,7 @@
-# TermiMail
 .venv
 credentials.json
 token.json
+.cursor
 
 ##### Windows
 # Windows thumbnail cache files
