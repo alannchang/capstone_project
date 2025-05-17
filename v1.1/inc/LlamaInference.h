@@ -51,6 +51,7 @@ private:
     llama_context* ctx_ = nullptr;
     llama_sampler* sampler_ = nullptr;
     const llama_vocab* vocab_ = nullptr;
+    int n_past_ = 0;
     
     // Chat history
     std::vector<llama_chat_message> messages_;

@@ -110,23 +110,20 @@ std::string LlamaInference::generateWithCallback(
     const std::string& prompt, 
     std::function<void(const std::string&)> token_callback
 ) {
-    // Clear KV cache for sequence 0 to ensure a fresh start for this generation
-    if (ctx_) { // Ensure context is valid before clearing
-        llama_kv_self_clear(ctx_);
-    }
+    // REMOVED: llama_kv_self_clear(ctx_); // This was for independent prompts
 
     std::string response;
 
     std::vector<llama_token> prompt_tokens;
-    prompt_tokens.resize(prompt.length() + 16);
+    prompt_tokens.resize(prompt.length() + 16); // Provide some buffer
     int n_prompt_tokens = llama_tokenize(
         vocab_,
         prompt.c_str(), 
         prompt.length(), 
         prompt_tokens.data(), 
         prompt_tokens.size(), 
-        false, 
-        true
+        false, // add_bos - assuming template handles this, or it's not needed for subsequent turns
+        true   // parse_special
     );
 
     if (n_prompt_tokens < 0) {
@@ -139,15 +136,35 @@ std::string LlamaInference::generateWithCallback(
         fprintf(stderr, "failed to tokenize the prompt (resulted in empty token list)\\n");
         return "";
     }
+
+    // KV Cache Overflow Management
+    const int n_ctx = llama_n_ctx(ctx_);
+    if (n_past_ + n_prompt_tokens > n_ctx) {
+        // Calculate how many tokens we need to remove to make space for the new prompt tokens
+        // and keep at least some context (e.g., half of it, or a fixed amount)
+        // This is a simple strategy; more sophisticated ones might be needed for optimal performance.
+        int n_tokens_to_fit_prompt = n_past_ + n_prompt_tokens - n_ctx; 
+        int n_discard = n_tokens_to_fit_prompt + (n_ctx / 4); // Remove enough to fit + 1/4th of context as buffer
+        n_discard = std::min(n_past_, n_discard); // Cannot discard more than available
+
+        // fprintf(stderr, "KV cache overflow (prompt): n_past_=%d, n_prompt_tokens=%d, n_ctx=%d. Planning to discard %d tokens.\\n", n_past_, n_prompt_tokens, n_ctx, n_discard);
+
+        if (n_discard > 0) {
+            llama_kv_self_seq_rm(ctx_, 0, 0, n_discard); // Remove n_discard tokens from the beginning of sequence 0
+            n_past_ -= n_discard;
+            // fprintf(stderr, "KV cache after discard (prompt): n_past_ adjusted to %d\\n", n_past_);
+        }
+    }
     
     // Initialize batch. Max batch size set to 512 or num_prompt_tokens. embd=0, n_seq_max=1 for now.
+    // The batch size should be large enough for the prompt and then 1 for generation.
     llama_batch batch = llama_batch_init(std::max(512, n_prompt_tokens), 0, 1);
 
     // Add prompt tokens to the batch
     batch.n_tokens = n_prompt_tokens;
     for (int i = 0; i < n_prompt_tokens; ++i) {
         batch.token[i]    = prompt_tokens[i];
-        batch.pos[i]      = i;
+        batch.pos[i]      = n_past_ + i; // Use n_past_ for continuous context
         batch.n_seq_id[i] = 1;
         batch.seq_id[i][0]= 0; // Assuming sequence ID 0
         batch.logits[i]   = false;
@@ -156,44 +173,42 @@ std::string LlamaInference::generateWithCallback(
         batch.logits[batch.n_tokens - 1] = true; // Request logits for the last token of the prompt
     }
 
-    llama_token new_token_id;
-    int n_cur = 0; // current position in the sequence
+    // The 'n_cur' variable from previous version is effectively replaced by n_past_ management
+    // int n_cur = 0; // current position in the sequence (REMOVED)
     
-    while (true) {
-        int n_ctx = llama_n_ctx(ctx_);
-        // Corrected: Use llama_get_kv_cache_used_cells for total KV cache usage.
-        int n_ctx_used = llama_get_kv_cache_used_cells(ctx_);
-
-        // n_cur here is the total length of the sequence if we were to submit the current batch.
-        // For the first pass (prompt processing), batch.n_tokens is n_prompt_tokens.
-        // For subsequent passes (token generation), batch.n_tokens is 1.
-        // n_ctx_used is tokens already in KV. We are adding batch.n_tokens.
-        if (n_ctx_used + batch.n_tokens > n_ctx) {
-            fprintf(stderr, "context size exceeded: %d + %d > %d\\n", n_ctx_used, batch.n_tokens, n_ctx);
-            llama_batch_free(batch);
-            return response;
+    while (response.length() < 2048) { // Added a safety break for max response length
+        if (n_past_ >= n_ctx) { // If n_past_ (which will be pos of next token) hits context limit
+            // fprintf(stderr, "Context limit reached during generation: n_past_=%d, n_ctx=%d\\n", n_past_, n_ctx);
+            // Strategy: remove some tokens from the start to make space for new ones
+            const int n_discard_generation = n_ctx / 4; // Discard 1/4th of the context
+            
+            if (n_discard_generation > 0 && n_past_ > n_discard_generation) {
+                llama_kv_self_seq_rm(ctx_, 0, 0, n_discard_generation);
+                n_past_ -= n_discard_generation;
+                // fprintf(stderr, "KV cache after discard (generation): n_past_ adjusted to %d\\n", n_past_);
+            } else if (n_past_ > 0) { // Cannot discard 1/4 if less than that exists, discard all but one to be safe
+                llama_kv_self_seq_rm(ctx_, 0, 0, n_past_ -1);
+                n_past_ = 1; // Keep at least one token to avoid issues, though this state is tricky
+            }
+            // If n_past_ is 0 here and we still need to generate, it's an edge case.
+            // The current token being prepared (batch.pos[0] = n_past_) should use the new n_past_.
         }
-        
+
         if (llama_decode(ctx_, batch)) {
             fprintf(stderr, "failed to decode\\n");
             llama_batch_free(batch);
             return response;
         }
         
-        // After the first decode (prompt), n_cur should be n_prompt_tokens.
-        // This is the starting position for the next generated token.
-        if (n_cur == 0) {
-             n_cur = batch.n_tokens; 
+        // After the first decode (prompt processing), update n_past_
+        // This happens only once per call to generateWithCallback for the prompt.
+        if (batch.n_tokens == n_prompt_tokens) { // Identifying the prompt processing decode
+             n_past_ += n_prompt_tokens; 
         }
 
-        new_token_id = llama_sampler_sample(sampler_, ctx_, -1);
+        llama_token new_token_id = llama_sampler_sample(sampler_, ctx_, -1);
         
-        // LOG_DEBUG("Decoding token: {}", new_token_id);
-
-        // Check for End-of-Generation token
         if (llama_vocab_is_eog(llama_model_get_vocab(model_), new_token_id)) {
-            // LOG_INFO("EOG token found. Stopping generation.");
-            // llama_batch_free(batch); // Removed to prevent double-free
             break;
         }
         
@@ -212,18 +227,18 @@ std::string LlamaInference::generateWithCallback(
             response += piece_str;
         }
         
-        // Prepare batch for the next token
+        // Prepare batch for the next token (generation phase)
         batch.n_tokens = 1;
         batch.token[0]    = new_token_id;
-        batch.pos[0]      = n_cur; // Position of the new token in the sequence
+        batch.pos[0]      = n_past_; // Position of the new token is current n_past_
         batch.n_seq_id[0] = 1;
         batch.seq_id[0][0]= 0;
-        batch.logits[0]   = true; // Request logits for this new token to continue generation
+        batch.logits[0]   = true; 
         
-        n_cur++; // Increment sequence position for the next token
+        n_past_++; // Increment n_past_ for the token just added to be decoded
     }
     
-    llama_batch_free(batch); // Free batch when done with generation loop
+    llama_batch_free(batch);
     return response;
 }
 
@@ -269,6 +284,12 @@ std::string LlamaInference::chat(const std::string& user_message,
 }
 
 void LlamaInference::resetChat() {
+    // Clear KV cache and reset past token count for the new session
+    if (ctx_) {
+        llama_kv_self_clear(ctx_);
+    }
+    n_past_ = 0;
+
     // Free message contents
     for (auto& msg : messages_) {
         free(const_cast<char*>(msg.content));
