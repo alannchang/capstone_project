@@ -9,7 +9,7 @@
 class LlamaInference {
 public:
     // Constructor with configuration options
-    LlamaInference(const std::string& model_path, int n_gpu_layers = 99, int context_size = 2048);
+    LlamaInference(const std::string& model_path, int n_gpu_layers = 99, int context_size = 2048, int max_response_chars = 8192);
     
     // Destructor to clean up resources
     ~LlamaInference();
@@ -38,6 +38,7 @@ public:
     // Set parameters
     void setContextSize(int n_ctx);
     void setGpuLayers(int ngl);
+    void setMaxResponseChars(int max_chars);
     
 private:
     // Configuration
@@ -45,6 +46,7 @@ private:
     int n_gpu_layers_;
     int context_size_;
     std::string system_prompt_;
+    int max_response_chars_;
     
     // LLAMA resources
     llama_model* model_ = nullptr;

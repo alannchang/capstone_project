@@ -4,8 +4,8 @@
 #include <iostream>
 #include <functional>
 
-LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size)
-    : model_path_(model_path), n_gpu_layers_(n_gpu_layers), context_size_(context_size) {
+LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size, int max_response_chars)
+    : model_path_(model_path), n_gpu_layers_(n_gpu_layers), context_size_(context_size), max_response_chars_(max_response_chars) {
 }
 
 LlamaInference::~LlamaInference() {
@@ -176,9 +176,9 @@ std::string LlamaInference::generateWithCallback(
     // The 'n_cur' variable from previous version is effectively replaced by n_past_ management
     // int n_cur = 0; // current position in the sequence (REMOVED)
     
-    while (response.length() < 2048) { // Added a safety break for max response length
+    while (response.length() < max_response_chars_) { // Added a safety break for max response length
         if (n_past_ >= n_ctx) { // If n_past_ (which will be pos of next token) hits context limit
-            // fprintf(stderr, "Context limit reached during generation: n_past_=%d, n_ctx=%d\\n", n_past_, n_ctx);
+            // fprintf(stderr, "Context limit reached during generation: n_past_=%d, n_ctx=%d\n", n_past_, n_ctx);
             // Strategy: remove some tokens from the start to make space for new ones
             const int n_discard_generation = n_ctx / 4; // Discard 1/4th of the context
             
@@ -341,6 +341,10 @@ void LlamaInference::setGpuLayers(int ngl) {
             setSystemPrompt(saved_system_prompt);
         }
     }
+}
+
+void LlamaInference::setMaxResponseChars(int max_chars) {
+    max_response_chars_ = max_chars;
 }
 
 void LlamaInference::cleanup() {
