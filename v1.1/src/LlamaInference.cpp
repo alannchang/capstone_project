@@ -110,6 +110,11 @@ std::string LlamaInference::generateWithCallback(
     const std::string& prompt, 
     std::function<void(const std::string&)> token_callback
 ) {
+    // Clear KV cache for sequence 0 to ensure a fresh start for this generation
+    if (ctx_) { // Ensure context is valid before clearing
+        llama_kv_self_clear(ctx_);
+    }
+
     std::string response;
 
     std::vector<llama_token> prompt_tokens;
