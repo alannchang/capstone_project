@@ -243,54 +243,46 @@ class GmailManager:
         
         :param query: Optional search query to filter messages
         :param max_results: Maximum number of messages to retrieve
-        :return: List of message details
+        :return: List of message details (concise format)
         """
         try:
             results = self.service.users().messages().list(
                 userId='me', 
-                q=query, 
+                q=query,
                 maxResults=max_results
             ).execute()
             
             messages = results.get('messages', [])
             
-            detailed_messages = []
-            for msg in messages:
-                txt = self.service.users().messages().get(
-                    userId='me', 
-                    id=msg['id']
-                ).execute()
-                
-                try:
-                    payload = txt['payload']
-                    headers = payload['headers']
+            # New even more concise format: List of strings for the LLM
+            llm_friendly_summaries = []
+            if messages:
+                for msg_summary in messages: # msg_summary contains just id and threadId
+                    # We need to fetch metadata for subject and sender
+                    msg_data = self.service.users().messages().get(
+                        userId='me', id=msg_summary['id'], format='metadata', 
+                        metadataHeaders=['subject', 'from']
+                    ).execute()
                     
-                    # Extract subject and sender
-                    subject = next((h['value'] for h in headers if h['name'] == 'Subject'), 'No Subject')
-                    sender = next((h['value'] for h in headers if h['name'] == 'From'), 'Unknown Sender')
+                    headers = msg_data.get('payload', {}).get('headers', [])
+                    subject = 'N/A'
+                    sender = 'N/A'
                     
-                    # Decode message body
-                    if 'parts' in payload:
-                        body = payload['parts'][0]['body'].get('data', '')
-                    else:
-                        body = payload.get('body', {}).get('data', '')
+                    for h in headers:
+                        if h['name'].lower() == 'subject':
+                            subject = h['value']
+                        elif h['name'].lower() == 'from':
+                            sender = h['value']
                     
-                    body = base64.urlsafe_b64decode(body + '===').decode('utf-8') if body else 'No body'
-                    
-                    detailed_messages.append({
-                        'id': msg['id'],
-                        'subject': subject,
-                        'sender': sender,
-                        'snippet': body[:100] + '...' if len(body) > 100 else body
-                    })
-                except Exception as detail_error:
-                    print(f"Error processing message details: {detail_error}")
+                    llm_friendly_summaries.append(f"Subject: {subject}, From: {sender}")
             
-            return detailed_messages
-        
+            # Return a simple list of strings directly
+            return llm_friendly_summaries 
+
         except HttpError as e:
             print(f"An error occurred: {e}")
-            return {'error': str(e)}
+            # Return an error structure that C++ might expect or handle
+            return {'error': str(e), 'messages': []} 
 
     def send_message(self, to, subject, body):
         """
@@ -405,11 +397,21 @@ def delete_label(label_id: str = Path(..., description="ID of the label to delet
 @app.get("/messages", tags=["Messages"])
 def list_messages(
     query: str = Query("", description="Optional search query to filter messages"),
-    max_results: int = Query(10, description="Maximum number of messages to retrieve")
+    max_results: int = Query(10, description="Maximum number of messages to retrieve, will be capped by C++ caller if too high")
 ):
-    """List messages from Gmail inbox with optional search filter"""
-    messages = gmail_manager.list_messages(query=query, max_results=max_results)
-    return {"messages": messages}
+    """
+    List messages from the user's Gmail inbox.
+    Returns a concise list of summaries for the LLM.
+    """
+    try:
+        # The list_messages method now returns a list of strings or an error dict
+        result = gmail_manager.list_messages(query=query, max_results=max_results)
+        if isinstance(result, dict) and 'error' in result:
+            # Forward the error if present
+            raise HTTPException(status_code=500, detail=result['error']) 
+        return result # This will be a list of strings if successful
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 @app.post("/messages", tags=["Messages"])
 def send_message(message: EmailMessage):

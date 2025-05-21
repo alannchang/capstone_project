@@ -5,6 +5,11 @@
 #include <string>
 #include <vector>
 #include <functional>
+#include <fstream>
+
+// Added includes
+#include "httplib.h"
+#include "nlohmann/json.hpp"
 
 class LlamaInference {
 public:
@@ -47,6 +52,8 @@ private:
     int context_size_;
     std::string system_prompt_;
     int max_response_chars_;
+    std::string gmail_microservice_address_ = "http://localhost:8000"; // Default, make configurable
+    std::ofstream debug_log_file_;
     
     // LLAMA resources
     llama_model* model_ = nullptr;
@@ -63,6 +70,9 @@ private:
     // Initialize chat with system prompt
     void initializeChat();
     
+    // Helper to make HTTP POST/GET requests for tools
+    std::string make_tool_request(const std::string& method, const std::string& endpoint, const nlohmann::json& params);
+
     // Clean up resources
     void cleanup();
 };

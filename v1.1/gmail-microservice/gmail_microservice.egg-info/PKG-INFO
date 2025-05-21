@@ -11,8 +11,3 @@ Requires-Dist: google-auth-httplib2
 Requires-Dist: google-api-python-client
 Requires-Dist: python-multipart
 Requires-Dist: pydantic[email]
-Provides-Extra: test
-Requires-Dist: pytest; extra == "test"
-Requires-Dist: httpx; extra == "test"
-Requires-Dist: pytest-mock; extra == "test"
-Requires-Dist: pytest-asyncio; extra == "test"
