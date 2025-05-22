@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
 
     if (argc < 2) {
         if (main_debug_log.is_open()) main_debug_log << "ERROR main: Not enough arguments." << std::endl;
-        std::cout << "Usage: " << argv[0] << " -m model.gguf [-c context_size (default 4096)] [-ngl n_gpu_layers]" << std::endl;
+        std::cout << "Usage: " << argv[0] << " -m model.gguf [-c context_size (default 4096)] [-ngl n_gpu_layers] [-t n_threads (default: hardware_concurrency)] [-tb n_threads_batch (default: hardware_concurrency)]" << std::endl;
         return 1;
     }
     
@@ -119,6 +119,8 @@ int main(int argc, char** argv) {
     std::string model_path;
     int ngl = 99;
     int n_ctx = 4096; // Increased default context size
+    int n_threads = -1; // Default to -1, let LlamaInference or llama.cpp decide, or use hardware_concurrency
+    int n_threads_batch = -1; // Default to -1
     
     for (int i = 1; i < argc; i++) {
         try {
@@ -128,9 +130,13 @@ int main(int argc, char** argv) {
                 n_ctx = std::stoi(argv[++i]);
             } else if (strcmp(argv[i], "-ngl") == 0 && i + 1 < argc) {
                 ngl = std::stoi(argv[++i]);
+            } else if ((strcmp(argv[i], "-t") == 0 || strcmp(argv[i], "--threads") == 0) && i + 1 < argc) {
+                n_threads = std::stoi(argv[++i]);
+            } else if ((strcmp(argv[i], "-tb") == 0 || strcmp(argv[i], "--threads-batch") == 0) && i + 1 < argc) {
+                n_threads_batch = std::stoi(argv[++i]);
             }
         } catch (std::exception& e) {
-            std::cerr << "Error: " << e.what() << std::endl;
+            std::cerr << "Error parsing arguments: " << e.what() << std::endl;
             return 1;
         }
     }
@@ -196,7 +202,24 @@ If a tool call results in an error, I will inform you of the error. You should t
 )EOF";
 
     // initialize LlamaInference object
-    LlamaInference llama(model_path, ngl, n_ctx);
+    // Determine the number of threads to use
+    unsigned int hardware_concurrency_val = std::thread::hardware_concurrency();
+    if (n_threads == -1) {
+        n_threads = hardware_concurrency_val > 0 ? hardware_concurrency_val : 4; // Fallback if detection fails
+    }
+    if (n_threads_batch == -1) {
+        n_threads_batch = hardware_concurrency_val > 0 ? hardware_concurrency_val : 4; // Fallback if detection fails, can also default to n_threads
+    }
+
+    if (main_debug_log.is_open()) {
+        main_debug_log << "INFO main: Using " << n_threads << " threads for generation." << std::endl;
+        main_debug_log << "INFO main: Using " << n_threads_batch << " threads for batch processing." << std::endl;
+    } else {
+        std::cout << "INFO main: Using " << n_threads << " threads for generation." << std::endl;
+        std::cout << "INFO main: Using " << n_threads_batch << " threads for batch processing." << std::endl;
+    }
+
+    LlamaInference llama(model_path, ngl, n_ctx, n_threads, n_threads_batch);
 
     // Set system prompt
     llama.setSystemPrompt(system_prompt);

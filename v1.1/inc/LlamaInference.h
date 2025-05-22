@@ -14,7 +14,7 @@
 class LlamaInference {
 public:
     // Constructor with configuration options
-    LlamaInference(const std::string& model_path, int n_gpu_layers = 99, int context_size = 2048, int max_response_chars = 8192);
+    LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size, int num_threads_generate = 4, int num_threads_batch = 4);
     
     // Destructor to clean up resources
     ~LlamaInference();
@@ -50,8 +50,10 @@ private:
     std::string model_path_;
     int n_gpu_layers_;
     int context_size_;
+    int max_response_chars_ = 2048; // Default max response length
+    int num_threads_generate_;
+    int num_threads_batch_;
     std::string system_prompt_;
-    int max_response_chars_;
     std::string gmail_microservice_address_ = "http://localhost:8000"; // Default, make configurable
     std::ofstream debug_log_file_;
     

@@ -45,8 +45,12 @@ bool tryParseToolCall(const std::string& llm_response, std::string& tool_name, j
 }
 } // end anonymous namespace
 
-LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size, int max_response_chars)
-    : model_path_(model_path), n_gpu_layers_(n_gpu_layers), context_size_(context_size), max_response_chars_(max_response_chars) {
+LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size, int num_threads_generate, int num_threads_batch)
+    : model_path_(model_path), 
+      n_gpu_layers_(n_gpu_layers), 
+      context_size_(context_size), 
+      num_threads_generate_(num_threads_generate), 
+      num_threads_batch_(num_threads_batch) {
     debug_log_file_.open("llama_debug.log", std::ios::app); // Open log file in append mode
     if (debug_log_file_.is_open()) {
         debug_log_file_ << "\n--- LlamaInference Initialized ---" << std::endl << std::flush;
@@ -99,7 +103,9 @@ bool LlamaInference::initialize() {
     // Initialize the context
     llama_context_params ctx_params = llama_context_default_params();
     ctx_params.n_ctx = context_size_;
-    ctx_params.n_batch = context_size_;
+    ctx_params.n_batch = context_size_; // Can be configured, e.g. 512 or context_size_
+    ctx_params.n_threads = num_threads_generate_ > 0 ? num_threads_generate_ : 0; // 0 for llama.cpp default (often physical cores)
+    ctx_params.n_threads_batch = num_threads_batch_ > 0 ? num_threads_batch_ : 0; // 0 for llama.cpp default
     ctx_ = llama_init_from_model(model_, ctx_params);
     if (!ctx_) {
         fprintf(stderr, "error: failed to create the llama_context\n");
