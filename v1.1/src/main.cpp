@@ -171,34 +171,24 @@ int main(int argc, char** argv) {
     // std::string system_prompt = "You are a helpful assistant."; // Old simple prompt
 
     // New system prompt specifically for Qwen3 and tool calling, using a custom delimiter
-    std::string system_prompt = R"EOF(You are a helpful AI assistant.
-You have access to a variety of tools to interact with Gmail and other services.
-When you decide to use a tool, you MUST respond ONLY with a single, valid JSON object. This JSON object should have two keys:
-1. "tool_name": A string representing the exact name of the tool to be called.
-2. "parameters": A JSON object containing the arguments for the tool. If a tool takes no arguments, provide an empty JSON object (e.g., {}).
-
-Do NOT add any other text, explanations, or markdown formatting around the JSON object. Your entire response must be just the JSON object itself when calling a tool.
+    std::string system_prompt = R"EOF(You are an AI assistant. Tools are available.
+When calling a tool, respond ONLY with a single JSON object: {"tool_name": "...", "parameters": {...}}.
+No other text, explanations, or markdown.
 
 Available tools:
-- {"tool_name": "send_email", "parameters": {"to": "string (email_address)", "subject": "string", "body": "string"}} - Sends an email. (Example: {"tool_name": "send_email", "parameters": {"to": "test@example.com", "subject": "Hello", "body": "Hi there!"}})
-- {"tool_name": "list_labels", "parameters": {}} - Lists all Gmail labels. (Example: {"tool_name": "list_labels", "parameters": {}})
-- {"tool_name": "get_profile", "parameters": {}} - Gets the user's Gmail profile. (Example: {"tool_name": "get_profile", "parameters": {}})
-- {"tool_name": "trash_message", "parameters": {"message_id": "string"}} - Moves a specific message to trash. (Example: {"tool_name": "trash_message", "parameters": {"message_id": "123xyz"}})
-// TODO: Add descriptions for other tools as they are implemented in LlamaInference.cpp.
-// Ensure the "parameters" descriptions here clearly indicate the type and purpose of each argument.
-// For example:
-// - {"tool_name": "get_label", "parameters": {"label_id": "string (ID of the label)"}} - Gets details for a specific label.
-// - {"tool_name": "create_label", "parameters": {"name": "string (desired_label_name)", "label_list_visibility": "string (e.g., 'labelShow')", "message_list_visibility": "string (e.g., 'show')"}} - Creates a new label.
-// - {"tool_name": "list_messages", "parameters": {"query": "string (Gmail search query)", "max_results": "integer (optional, default 10)"}} - Lists messages.
+- {"name": "send_email", "description": "Sends an email.", "parameters": {"to": "string (email_address)", "subject": "string", "body": "string"}}
+- {"name": "list_labels", "description": "Lists all Gmail labels.", "parameters": {}}
+- {"name": "get_profile", "description": "Gets the user's Gmail profile.", "parameters": {}}
+- {"name": "trash_message", "description": "Moves a specific message to trash.", "parameters": {"message_id": "string"}}
+- {"name": "list_messages", "description": "Lists messages.", "parameters": {"query": "string (Gmail search query)", "max_results": "integer (optional, default 3, max 5)"}}
+// TODO: Add concise descriptions for other tools: get_label, create_label, update_label, delete_label, get_history
 
-After you request a tool call, I will execute it and provide you with the result in a message with role "tool".
-Based on the tool's result, you can then:
-- Formulate a final textual response to the user.
-- Decide to call another tool (again, by responding ONLY with the JSON for that tool call).
-- Ask the user for clarification if needed.
-
-If you can answer the user's request directly without needing any tools, please provide a direct textual response without any JSON.
-If a tool call results in an error, I will inform you of the error. You should then try to inform the user or try a different approach if appropriate.
+Tool results will be provided via role "tool".
+Based on the result:
+- Respond to the user in plain text.
+- Call another tool (as JSON).
+- Ask for clarification.
+If no tool is needed, respond directly. If a tool call errors, inform the user or try an alternative.
 )EOF";
 
     // initialize LlamaInference object
