@@ -237,52 +237,113 @@ class GmailManager:
 
     """ MESSAGES """
 
-    def list_messages(self, query='', max_results=10):
+    def list_messages(self, query: str = '', max_results: Optional[int] = None):
         """
-        List messages from Gmail inbox
+        List messages from Gmail inbox, handling pagination and fetching metadata (sender, subject, snippet).
         
         :param query: Optional search query to filter messages
-        :param max_results: Maximum number of messages to retrieve
-        :return: List of message details (concise format)
+        :param max_results: Optional maximum number of messages to retrieve.
+        :return: List of message objects, each containing id, threadId, from, subject, and snippet.
         """
         try:
-            results = self.service.users().messages().list(
-                userId='me', 
-                q=query,
-                maxResults=max_results
-            ).execute()
+            listed_messages_ids = []
+            page_token = None
+            actual_max_results = max_results if max_results is not None else float('inf') # Effectively no limit if None
+
+            while len(listed_messages_ids) < actual_max_results:
+                # Determine how many to fetch for the list() call per page
+                # The API's maxResults for list() is a per-page limit (default 100).
+                # We fetch pages until we have enough IDs or no more pages.
+                # If user specified max_results=3, we might still fetch a page of 100 IDs then take 3.
+                # This is fine for IDs, then we'll do targeted GETs.
+                
+                api_list_call_params = {
+                    'userId': 'me',
+                    'q': query,
+                    'pageToken': page_token
+                }
+                # If max_results is very large or None, API uses default page size (e.g., 100)
+                # If max_results is small, we can tell API to fetch fewer per page, but it's just a page limit.
+                # For simplicity, let API use its default page size for list(), we control total via loop.
+
+                results = self.service.users().messages().list(**api_list_call_params).execute()
+                
+                current_ids_page = results.get('messages', [])
+                if not current_ids_page:
+                    break
+
+                for msg_id_obj in current_ids_page:
+                    if len(listed_messages_ids) < actual_max_results:
+                        listed_messages_ids.append(msg_id_obj) # msg_id_obj is like {'id': '...', 'threadId': '...'}
+                    else:
+                        break
+                
+                page_token = results.get('nextPageToken')
+                if not page_token or len(listed_messages_ids) >= actual_max_results:
+                    break
             
-            messages = results.get('messages', [])
-            
-            # New even more concise format: List of strings for the LLM
-            llm_friendly_summaries = []
-            if messages:
-                for msg_summary in messages: # msg_summary contains just id and threadId
-                    # We need to fetch metadata for subject and sender
+            # Now fetch metadata for the collected IDs
+            detailed_messages = []
+            print(f"DEBUG: About to fetch metadata for {len(listed_messages_ids)} message IDs.") # DEBUG PRINT
+            for msg_id_obj in listed_messages_ids:
+                try:
+                    msg_id = msg_id_obj['id']
+                    print(f"DEBUG: Fetching metadata for ID: {msg_id}") # DEBUG PRINT
                     msg_data = self.service.users().messages().get(
-                        userId='me', id=msg_summary['id'], format='metadata', 
-                        metadataHeaders=['subject', 'from']
+                        userId='me', 
+                        id=msg_id, 
+                        format='metadata', 
+                        metadataHeaders=['From', 'Subject'] # Snippet comes by default with metadata
                     ).execute()
                     
-                    headers = msg_data.get('payload', {}).get('headers', [])
-                    subject = 'N/A'
-                    sender = 'N/A'
-                    
-                    for h in headers:
-                        if h['name'].lower() == 'subject':
-                            subject = h['value']
-                        elif h['name'].lower() == 'from':
-                            sender = h['value']
-                    
-                    llm_friendly_summaries.append(f"Subject: {subject}, From: {sender}")
-            
-            # Return a simple list of strings directly
-            return llm_friendly_summaries 
+                    print(f"DEBUG: Raw msg_data for ID {msg_id}: {msg_data}") # DEBUG PRINT
 
+                    headers = msg_data.get('payload', {}).get('headers', [])
+                    sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'N/A')
+                    subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'N/A')
+                    snippet = msg_data.get('snippet', '')
+                    
+                    print(f"DEBUG: Parsed for ID {msg_id}: From='{sender}', Subject='{subject}', Snippet='{snippet[:30]}...' ") # DEBUG PRINT
+
+                    detailed_messages.append({
+                        'id': msg_id,
+                        'threadId': msg_id_obj['threadId'],
+                        'from': sender,
+                        'subject': subject,
+                        'snippet': snippet
+                    })
+                except HttpError as e_get:
+                    print(f"An error occurred while fetching metadata for message ID {msg_id}: {e_get}")
+                    # Optionally add a placeholder or skip this message
+                    detailed_messages.append({
+                        'id': msg_id,
+                        'threadId': msg_id_obj['threadId'],
+                        'error': f'Failed to fetch metadata: {str(e_get)}'
+                    })
+            
+            return detailed_messages
+        except HttpError as e_list:
+            print(f"An error occurred while listing messages: {e_list}")
+            return []
+
+    def get_message_content(self, message_id: str):
+        """
+        Get the full content of a specific message.
+
+        :param message_id: The ID of the message to retrieve.
+        :return: Full message details or an error dictionary.
+        """
+        try:
+            message = self.service.users().messages().get(
+                userId='me',
+                id=message_id,
+                format='full'  # Retrieve full message details
+            ).execute()
+            return message
         except HttpError as e:
-            print(f"An error occurred: {e}")
-            # Return an error structure that C++ might expect or handle
-            return {'error': str(e), 'messages': []} 
+            print(f"An error occurred while getting message content for ID {message_id}: {e}")
+            # Consider returning specific error details or raising an exception
+            return {'error': str(e), 'message_id': message_id}
 
     def send_message(self, to, subject, body):
         """
@@ -389,29 +450,41 @@ def update_label(
 def delete_label(label_id: str = Path(..., description="ID of the label to delete")):
     """Delete a label"""
     result = gmail_manager.delete_label(label_id)
-    if not result['success']:
-        raise HTTPException(status_code=404, detail=f"Label {label_id} not found")
+    if 'error' in result and not result.get('success', True):
+        raise HTTPException(status_code=400, detail=result['error'])
     return result
 
 # Message endpoints
 @app.get("/messages", tags=["Messages"])
-def list_messages(
+def list_messages_endpoint(
     query: str = Query("", description="Optional search query to filter messages"),
-    max_results: int = Query(10, description="Maximum number of messages to retrieve, will be capped by C++ caller if too high")
+    max_results: Optional[int] = Query(None, description="Optional maximum number of messages to retrieve.")
 ):
     """
-    List messages from the user's Gmail inbox.
-    Returns a concise list of summaries for the LLM.
+    List messages from Gmail inbox.
+    Handles pagination to retrieve messages matching the query, up to max_results if specified.
     """
-    try:
-        # The list_messages method now returns a list of strings or an error dict
-        result = gmail_manager.list_messages(query=query, max_results=max_results)
-        if isinstance(result, dict) and 'error' in result:
-            # Forward the error if present
-            raise HTTPException(status_code=500, detail=result['error']) 
-        return result # This will be a list of strings if successful
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+    manager = GmailManager()
+    # Pass max_results to the manager method
+    messages = manager.list_messages(query=query, max_results=max_results) 
+    if manager.service is None: # Check if service initialization failed
+        raise HTTPException(status_code=500, detail="Failed to connect to Gmail service.")
+    return {"messages": messages}
+
+@app.get("/messages/{message_id}", tags=["Messages"])
+def get_message_content_endpoint(message_id: str = Path(..., description="The ID of the message to retrieve.")):
+    """
+    Get the full content of a specific message by its ID.
+    """
+    manager = GmailManager()
+    message_content = manager.get_message_content(message_id=message_id)
+    if manager.service is None: # Check if service initialization failed
+        raise HTTPException(status_code=500, detail="Failed to connect to Gmail service.")
+    if 'error' in message_content:
+        # Distinguish between a 404 (not found) and other errors if needed
+        raise HTTPException(status_code=404 if "Not Found" in message_content.get('error', "") else 500, \
+                            detail=message_content.get('error', "Failed to retrieve message content."))
+    return message_content
 
 @app.post("/messages", tags=["Messages"])
 def send_message(message: EmailMessage):

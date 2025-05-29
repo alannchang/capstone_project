@@ -703,7 +703,8 @@ std::string LlamaInference::chat(const std::string& user_message,
                 tool_api_endpoint = "/messages";
                 http_method = "GET";
                 // Parameters like "query" and "max_results" will be handled by make_tool_request for GET
-                // ADDITION: Limit max_results to prevent overly long responses
+                // REMOVED: Hardcoded max_results capping. Let LLM/Python service handle it.
+                /*
                 if (tool_params.contains("max_results") && tool_params["max_results"].is_number()) {
                     int current_max_results = tool_params["max_results"].get<int>();
                     const int MAX_RESULTS_CAP = 3; // Cap at 3 messages
@@ -719,7 +720,27 @@ std::string LlamaInference::chat(const std::string& user_message,
                      if (debug_log_file_.is_open()) {
                         debug_log_file_ << "INFO: list_messages max_results not specified by LLM, setting to 3." << std::endl << std::flush;
                      }
-                } // If max_results is present but not a number, it will be passed as is (and likely fail at microservice or GET formatting)
+                }
+                */
+            }
+            else if (tool_name == "get_message_content") {
+                http_method = "GET";
+                if (tool_params.contains("message_id") && tool_params["message_id"].is_string()) {
+                    std::string message_id = tool_params["message_id"].get<std::string>();
+                    tool_api_endpoint = "/messages/" + message_id;
+                    // Parameters for GET are typically in the URL, so tool_params might be empty or not used for body.
+                    // If message_id was the *only* param, we might want to clear tool_params or ensure make_tool_request handles it well for GET.
+                    // For now, assuming make_tool_request handles empty tool_params for GET, or only uses relevant ones for query string.
+                    // It's safer to remove message_id from tool_params if it's path-based to avoid it becoming a query param.
+                    tool_params.erase("message_id"); 
+                } else {
+                    const char* param_err = "[Error: get_message_content tool call missing 'message_id' string parameter]";
+                    if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: " << param_err << std::endl << std::flush;
+                    char* param_err_content = strdup(param_err);
+                    if(param_err_content) messages_.push_back({"system", param_err_content});
+                    // Skip making the request and let LLM handle the error
+                    continue; 
+                }
             }
             else {
                 std::string unknown_tool_msg = "[Error: Unknown tool name: " + tool_name + "]";
@@ -735,6 +756,15 @@ std::string LlamaInference::chat(const std::string& user_message,
             }
             
             std::string tool_response_str = make_tool_request(http_method, tool_api_endpoint, tool_params);
+
+            // ***** ADD THIS DEBUG BLOCK *****
+            if (debug_log_file_.is_open()) {
+                debug_log_file_ << "DEBUG LlamaInference::chat: RAW tool_response_str from make_tool_request (BEFORE strdup) for tool '" << tool_name << "':\n" << tool_response_str << "\nEND RAW tool_response_str" << std::endl << std::flush;
+            } else {
+                std::cout << "DEBUG LlamaInference::chat: RAW tool_response_str from make_tool_request (BEFORE strdup) for tool '" << tool_name << "':\n" << tool_response_str << "\nEND RAW tool_response_str" << std::endl;
+            }
+            // ***** END DEBUG BLOCK *****
+
             if (debug_log_file_.is_open()) {
                 debug_log_file_ << "DEBUG: Tool Response from microservice:\n" << tool_response_str << "\nEND DEBUG TOOL RESPONSE" << std::endl;
             } else {

@@ -175,12 +175,16 @@ int main(int argc, char** argv) {
 When calling a tool, respond ONLY with a single JSON object: {"tool_name": "...", "parameters": {...}}.
 No other text, explanations, or markdown.
 
+To fulfill requests like "show me my last 3 unread emails", you should use the "list_messages" tool with appropriate query (e.g., "is:unread") and max_results (e.g., 3). This tool will return a list of messages, each including sender (from), subject, and a snippet of the content. Present this information directly to the user. Do not show raw message IDs unless the user asks for them or for an operation that requires an ID.
+If the user asks for the full content of a specific email after seeing the list, or needs to perform an action on a specific email (like trashing it), then you can use the "get_message_content" tool (for full content) or other relevant tools, using the message ID from the initial list.
+
 Available tools:
 - {"name": "send_email", "description": "Sends an email.", "parameters": {"to": "string (email_address)", "subject": "string", "body": "string"}}
 - {"name": "list_labels", "description": "Lists all Gmail labels.", "parameters": {}}
 - {"name": "get_profile", "description": "Gets the user's Gmail profile.", "parameters": {}}
-- {"name": "trash_message", "description": "Moves a specific message to trash.", "parameters": {"message_id": "string"}}
-- {"name": "list_messages", "description": "Lists messages.", "parameters": {"query": "string (Gmail search query)", "max_results": "integer (optional, default 3, max 5)"}}
+- {"name": "trash_message", "description": "Moves a specific message to trash using its ID.", "parameters": {"message_id": "string"}}
+- {"name": "list_messages", "description": "Lists messages matching a query. Returns a list of messages, each including sender (from), subject, snippet, and message ID.", "parameters": {"query": "string (Gmail search query, e.g., 'is:unread')", "max_results": "integer (optional, specifies maximum number of messages to return)"}}
+- {"name": "get_message_content", "description": "Gets the full raw content (headers, body, payload, etc.) of a specific message using its ID. Use this if the snippet from list_messages is insufficient and the user wants more details.", "parameters": {"message_id": "string"}}
 // TODO: Add concise descriptions for other tools: get_label, create_label, update_label, delete_label, get_history
 
 Tool results will be provided via role "tool".
