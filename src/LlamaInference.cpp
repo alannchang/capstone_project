@@ -50,7 +50,8 @@ LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, 
       n_gpu_layers_(n_gpu_layers), 
       context_size_(context_size), 
       num_threads_generate_(num_threads_generate), 
-      num_threads_batch_(num_threads_batch) {
+      num_threads_batch_(num_threads_batch),
+      max_response_chars_(context_size) { // Default max_response_chars to context_size
     debug_log_file_.open("llama_debug.log", std::ios::app); // Open log file in append mode
     if (debug_log_file_.is_open()) {
         debug_log_file_ << "\n--- LlamaInference Initialized ---" << std::endl << std::flush;
@@ -308,6 +309,8 @@ std::string LlamaInference::generateWithCallback(
     // The 'n_cur' variable from previous version is effectively replaced by n_past_ management
     // int n_cur = 0; // current position in the sequence (REMOVED)
     
+    bool eog_detected = false; // Flag to track if EOG was the reason for stopping
+
     while (response.length() < max_response_chars_) { // Added a safety break for max response length
         if (n_past_ >= n_ctx) { // If n_past_ (which will be pos of next token) hits context limit
             // fprintf(stderr, "Context limit reached during generation: n_past_=%d, n_ctx=%d\n", n_past_, n_ctx);
@@ -343,6 +346,10 @@ std::string LlamaInference::generateWithCallback(
         llama_token new_token_id = llama_sampler_sample(sampler_, ctx_, -1);
         
         if (llama_vocab_is_eog(llama_model_get_vocab(model_), new_token_id)) {
+            if (debug_log_file_.is_open()) {
+                debug_log_file_ << "DEBUG LlamaInference::generateWithCallback: EOG token detected. Stopping generation." << std::endl << std::flush;
+            }
+            eog_detected = true;
             break;
         }
         
@@ -375,7 +382,15 @@ std::string LlamaInference::generateWithCallback(
     llama_batch_free(batch);
 
     if (debug_log_file_.is_open()) {
-        debug_log_file_ << "DEBUG LlamaInference::generateWithCallback: Finished generation. Total response length: " << response.length() << std::endl << std::flush;
+        debug_log_file_ << "DEBUG LlamaInference::generateWithCallback: Generation loop finished." << std::endl;
+        if (eog_detected) {
+            debug_log_file_ << "DEBUG LlamaInference::generateWithCallback: Stopped due to EOG token. Response length: " << response.length() << std::endl;
+        } else if (response.length() >= max_response_chars_) {
+            debug_log_file_ << "DEBUG LlamaInference::generateWithCallback: Stopped due to max_response_chars_ limit (set to " << max_response_chars_ << "). Response length: " << response.length() << std::endl;
+        } else {
+            debug_log_file_ << "DEBUG LlamaInference::generateWithCallback: Stopped for other reasons (response length " << response.length() << " < max_response_chars_ " << max_response_chars_ << ")." << std::endl;
+        }
+        debug_log_file_ << "DEBUG LlamaInference::generateWithCallback: Final response content (first 300 chars): " << response.substr(0, 300) << (response.length() > 300 ? "..." : "") << std::endl << std::flush;
     }
     return response;
 }
@@ -527,6 +542,11 @@ std::string LlamaInference::chat(const std::string& user_message,
         }
         if (static_cast<size_t>(formatted_len) > formatted_.size()) {
             fprintf(stderr, "Error: Formatted prompt length (%d) exceeds buffer size (%zu).\n", formatted_len, formatted_.size());
+            if (debug_log_file_.is_open()) {
+                debug_log_file_ << "ERROR LlamaInference::chat: [Loop " << i << "] Formatted prompt length (" << formatted_len 
+                                << ") exceeds buffer size (" << formatted_.size() 
+                                << "). Returning early with error message." << std::endl << std::flush;
+            }
             // Try to recover or error out
             if (!messages_.empty()) { // Remove last message, might be too long
                 free(const_cast<char*>(messages_.back().content));
@@ -856,7 +876,7 @@ void LlamaInference::setMaxResponseChars(int max_chars) {
      if (debug_log_file_.is_open()) {
         debug_log_file_ << "DEBUG LlamaInference::setMaxResponseChars: " << max_chars << std::endl << std::flush;
     }
-    max_response_chars_ = max_chars > 0 ? max_chars : 1024; // Ensure it's positive
+    max_response_chars_ = max_chars > 0 ? max_chars : context_size_; // Ensure it's positive, fallback to context_size if not
 }
 
 void LlamaInference::cleanup() {

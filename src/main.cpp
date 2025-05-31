@@ -111,7 +111,7 @@ int main(int argc, char** argv) {
 
     if (argc < 2) {
         if (main_debug_log.is_open()) main_debug_log << "ERROR main: Not enough arguments." << std::endl;
-        std::cout << "Usage: " << argv[0] << " -m model.gguf [-c context_size (default 4096)] [-ngl n_gpu_layers] [-t n_threads (default: hardware_concurrency)] [-tb n_threads_batch (default: hardware_concurrency)]" << std::endl;
+        std::cout << "Usage: " << argv[0] << " -m model.gguf [-c context_size (default 4096)] [-ngl n_gpu_layers] [-t n_threads (default: hardware_concurrency)] [-tb n_threads_batch (default: hardware_concurrency)] [-mrc max_response_chars (default: context_size)]" << std::endl;
         return 1;
     }
     
@@ -121,6 +121,7 @@ int main(int argc, char** argv) {
     int n_ctx = 4096; // Increased default context size
     int n_threads = -1; // Default to -1, let LlamaInference or llama.cpp decide, or use hardware_concurrency
     int n_threads_batch = -1; // Default to -1
+    int user_max_response_chars = -1; // User specified max response chars
     
     for (int i = 1; i < argc; i++) {
         try {
@@ -134,6 +135,8 @@ int main(int argc, char** argv) {
                 n_threads = std::stoi(argv[++i]);
             } else if ((strcmp(argv[i], "-tb") == 0 || strcmp(argv[i], "--threads-batch") == 0) && i + 1 < argc) {
                 n_threads_batch = std::stoi(argv[++i]);
+            } else if ((strcmp(argv[i], "-mrc") == 0 || strcmp(argv[i], "--max-response-chars") == 0) && i + 1 < argc) {
+                user_max_response_chars = std::stoi(argv[++i]);
             }
         } catch (std::exception& e) {
             std::cerr << "Error parsing arguments: " << e.what() << std::endl;
@@ -217,6 +220,19 @@ If no tool is needed, respond directly. If a tool call errors, inform the user o
 
     // Set system prompt
     llama.setSystemPrompt(system_prompt);
+
+    // If user specified max_response_chars, apply it. Otherwise, it defaults to context_size in LlamaInference constructor.
+    if (user_max_response_chars > 0) {
+        llama.setMaxResponseChars(user_max_response_chars);
+        if (main_debug_log.is_open()) main_debug_log << "INFO main: User override: Set max_response_chars to " << user_max_response_chars << std::endl;
+        else std::cout << "INFO main: User override: Set max_response_chars to " << user_max_response_chars << std::endl;
+    } else {
+        // Log the default value being used (which is n_ctx, set in LlamaInference constructor)
+        // To get this value accurately for logging, we might need a getter in LlamaInference or pass n_ctx to this log.
+        // For simplicity, we'll just state it defaults to context size here.
+        if (main_debug_log.is_open()) main_debug_log << "INFO main: max_response_chars defaulted to context_size (" << n_ctx << ")." << std::endl;
+        else std::cout << "INFO main: max_response_chars defaulted to context_size (" << n_ctx << ")." << std::endl;
+    }
 
     if (!llama.initialize()) {
         std::cerr << "Failed to initialize LlamaInference." << std::endl;

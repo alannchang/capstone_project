@@ -237,6 +237,66 @@ class GmailManager:
 
     """ MESSAGES """
 
+    def _extract_and_decode_body(self, payload: Dict[str, Any]) -> str:
+        """
+        Extracts and decodes the message body from the payload.
+        Prefers text/plain, then text/html.
+        """
+        body_content = ""
+        mime_type = payload.get('mimeType', '')
+
+        if 'text/plain' in mime_type:
+            if 'data' in payload.get('body', {}):
+                body_content = payload['body']['data']
+        elif 'text/html' in mime_type:
+            if 'data' in payload.get('body', {}):
+                body_content = payload['body']['data']
+        
+        if body_content:
+            try:
+                # Replace URL-safe characters and add padding if necessary
+                decoded_bytes = base64.urlsafe_b64decode(body_content.replace('-', '+').replace('_', '/') + "===")
+                return decoded_bytes.decode('utf-8')
+            except Exception as e:
+                print(f"Error decoding body part: {e}")
+                return f"[Error decoding body: {e}]"
+
+        if 'parts' in payload:
+            plain_text_body = ""
+            html_body = ""
+            for part in payload['parts']:
+                part_mime_type = part.get('mimeType', '')
+                if 'text/plain' in part_mime_type:
+                    if 'data' in part.get('body', {}):
+                        try:
+                            decoded_bytes = base64.urlsafe_b64decode(part['body']['data'].replace('-', '+').replace('_', '/') + "===")
+                            plain_text_body = decoded_bytes.decode('utf-8')
+                            break # Prefer plain text immediately
+                        except Exception as e:
+                            print(f"Error decoding text/plain part: {e}")
+                            plain_text_body = f"[Error decoding text/plain: {e}]"
+                elif 'text/html' in part_mime_type:
+                     if 'data' in part.get('body', {}):
+                        try:
+                            decoded_bytes = base64.urlsafe_b64decode(part['body']['data'].replace('-', '+').replace('_', '/') + "===")
+                            html_body = decoded_bytes.decode('utf-8')
+                        except Exception as e:
+                            print(f"Error decoding text/html part: {e}")
+                            html_body = f"[Error decoding text/html: {e}]"
+                elif 'multipart' in part_mime_type and 'parts' in part: # Recursive call for nested multiparts
+                    nested_body = self._extract_and_decode_body(part)
+                    if nested_body and not plain_text_body: # If plain text isn't found yet, take nested result
+                        if "[Error decoding" not in nested_body: # Prioritize valid decoded content
+                             if not html_body: # If html_body also not found, use this
+                                html_body = nested_body # Store as HTML as a fallback if no direct plain text is found later
+            
+            if plain_text_body:
+                return plain_text_body
+            if html_body: # Fallback to HTML if no plain text
+                return html_body
+        
+        return "[No readable body content found]"
+
     def list_messages(self, query: str = '', max_results: Optional[int] = None):
         """
         List messages from Gmail inbox, handling pagination and fetching metadata (sender, subject, snippet).
@@ -328,22 +388,37 @@ class GmailManager:
 
     def get_message_content(self, message_id: str):
         """
-        Get the full content of a specific message.
-
+        Get the full content of a specific message, parse and decode the body.
+        
         :param message_id: The ID of the message to retrieve.
-        :return: Full message details or an error dictionary.
+        :return: Parsed message content including sender, subject, and decoded body.
         """
         try:
-            message = self.service.users().messages().get(
-                userId='me',
-                id=message_id,
-                format='full'  # Retrieve full message details
-            ).execute()
-            return message
+            message = self.service.users().messages().get(userId='me', id=message_id, format='full').execute()
+            
+            payload = message.get('payload', {})
+            headers = payload.get('headers', [])
+            
+            subject = next((header['value'] for header in headers if header['name'].lower() == 'subject'), '[No Subject]')
+            sender = next((header['value'] for header in headers if header['name'].lower() == 'from'), '[No Sender]')
+            
+            body_content = self._extract_and_decode_body(payload)
+            
+            return {
+                'id': message.get('id'),
+                'threadId': message.get('threadId'),
+                'from': sender,
+                'subject': subject,
+                'snippet': message.get('snippet'), # Keep snippet for brief overview
+                'body': body_content
+            }
+            
         except HttpError as e:
-            print(f"An error occurred while getting message content for ID {message_id}: {e}")
-            # Consider returning specific error details or raising an exception
-            return {'error': str(e), 'message_id': message_id}
+            print(f"An error occurred while fetching message {message_id}: {e}")
+            raise HTTPException(status_code=e.resp.status, detail=str(e))
+        except Exception as e:
+            print(f"A general error occurred while processing message {message_id}: {e}")
+            raise HTTPException(status_code=500, detail=f"Failed to process message: {str(e)}")
 
     def send_message(self, to, subject, body):
         """
