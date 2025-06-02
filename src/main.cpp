@@ -21,6 +21,23 @@ std::ofstream main_debug_log;
 
 const std::string APP_VERSION = "v0.0.1";
 
+void print_detailed_help(const char* app_name) {
+    std::cout << "InboxPilot (" << APP_VERSION << ") - Local-First Gmail Management with LLM\n\n"
+              << "Usage: " << app_name << " -m <model_path> [options]\n\n"
+              << "Required Arguments:\n"
+              << "  -m, --model <path>         Path to the GGUF-format language model file.\n\n"
+              << "Options:\n"
+              << "  -h, --help                 Show this detailed help message and exit.\n"
+              << "  -c, --context-size <int>   Context size for the LLM. (Default: 4096)\n"
+              << "  -ngl, --gpu-layers <int>   Number of layers to offload to GPU. (Default: 99, for max possible based on model/VRAM)\n"
+              << "  -t, --threads <int>        Number of threads for token generation. (Default: hardware concurrency, or 4)\n"
+              << "  -tb, --threads-batch <int> Number of threads for batch processing/prompt ingestion. (Default: hardware concurrency, or 4)\n"
+              << "  -mrc, --max-response-chars <int> Maximum characters for LLM response. (Default: context size)\n"
+              << "  -ga, --gmail-addr <addr>   Address of the Gmail microservice. (Default: http://localhost:8000)\n"
+              << "  -spf, --system-prompt-file <path> Path to a file containing the system prompt. (Default: uses internal system prompt)\n"
+              << std::endl;
+}
+
 std::mutex response_mutex;
 std::atomic<bool> is_streaming = false;
 std::string response = "";
@@ -109,9 +126,19 @@ int main(int argc, char** argv) {
     if (main_debug_log.is_open()) main_debug_log << "\n--- Main Application Started ---" << std::endl;
     else std::cerr << "CRITICAL ERROR: Failed to open llama_debug.log in main!" << std::endl;
 
-    if (argc < 2) {
-        if (main_debug_log.is_open()) main_debug_log << "ERROR main: Not enough arguments." << std::endl;
-        std::cout << "Usage: " << argv[0] << " -m model.gguf [-c context_size (default 4096)] [-ngl n_gpu_layers] [-t n_threads (default: hardware_concurrency)] [-tb n_threads_batch (default: hardware_concurrency)] [-mrc max_response_chars (default: context_size)]" << std::endl;
+    // Check for help argument first
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--help") == 0) {
+            print_detailed_help(argv[0]);
+            return 0;
+        }
+    }
+
+    if (argc < 2) { // Basic check, model path is the minimum required that isn't help
+        if (main_debug_log.is_open()) main_debug_log << "ERROR main: Not enough arguments or model path missing." << std::endl;
+        else std::cerr << "ERROR main: Not enough arguments or model path missing (log not open)." << std::endl;
+        std::cout << "Usage: " << argv[0] << " -m <model_path> [options]\n"
+                  << "Use " << argv[0] << " --help for more detailed information." << std::endl;
         return 1;
     }
     
@@ -122,6 +149,8 @@ int main(int argc, char** argv) {
     int n_threads = -1; // Default to -1, let LlamaInference or llama.cpp decide, or use hardware_concurrency
     int n_threads_batch = -1; // Default to -1
     int user_max_response_chars = -1; // User specified max response chars
+    std::string gmail_address = "http://localhost:8000"; // Default Gmail service address
+    std::string system_prompt_file_path;
     
     for (int i = 1; i < argc; i++) {
         try {
@@ -137,15 +166,25 @@ int main(int argc, char** argv) {
                 n_threads_batch = std::stoi(argv[++i]);
             } else if ((strcmp(argv[i], "-mrc") == 0 || strcmp(argv[i], "--max-response-chars") == 0) && i + 1 < argc) {
                 user_max_response_chars = std::stoi(argv[++i]);
+            } else if ((strcmp(argv[i], "--gmail-addr") == 0 || strcmp(argv[i], "-ga") == 0) && i + 1 < argc) {
+                gmail_address = argv[++i];
+            } else if ((strcmp(argv[i], "--system-prompt-file") == 0 || strcmp(argv[i], "-spf") == 0) && i + 1 < argc) {
+                system_prompt_file_path = argv[++i];
             }
+            // Note: -h/--help is handled before this loop if present as the only arg, or will be caught if it needs a value it doesn't get
         } catch (std::exception& e) {
-            std::cerr << "Error parsing arguments: " << e.what() << std::endl;
+            if (main_debug_log.is_open()) main_debug_log << "ERROR main: Error parsing arguments: " << e.what() << std::endl;
+            else std::cerr << "Error parsing arguments: " << e.what() << std::endl; 
+            std::cout << "Use " << argv[0] << " --help for more detailed information." << std::endl;
             return 1;
         }
     }
     
     if (model_path.empty()) {
-        std::cout << "Model path is required." << std::endl;
+        if (main_debug_log.is_open()) main_debug_log << "ERROR main: Model path (-m) is required." << std::endl;
+        else std::cerr << "ERROR main: Model path (-m) is required (log not open)." << std::endl; 
+        std::cout << "Model path (-m) is required.\n"
+                  << "Use " << argv[0] << " --help for more detailed information." << std::endl; 
         return 1;
     }
     // load tools from json file
@@ -174,7 +213,25 @@ int main(int argc, char** argv) {
     // std::string system_prompt = "You are a helpful assistant."; // Old simple prompt
 
     // New system prompt specifically for Qwen3 and tool calling, using a custom delimiter
-    std::string system_prompt = R"EOF(You are an AI assistant. Tools are available.
+    std::string system_prompt;
+    if (!system_prompt_file_path.empty()) {
+        std::ifstream sp_file(system_prompt_file_path);
+        if (sp_file.is_open()) {
+            std::stringstream buffer;
+            buffer << sp_file.rdbuf();
+            system_prompt = buffer.str();
+            if (main_debug_log.is_open()) main_debug_log << "INFO main: Loaded system prompt from file: " << system_prompt_file_path << std::endl;
+            // else std::cout << "INFO main: Loaded system prompt from file: " << system_prompt_file_path << std::endl; // Replaced by log
+        } else {
+            if (main_debug_log.is_open()) main_debug_log << "ERROR main: Could not open system prompt file: " << system_prompt_file_path << ". Using default prompt." << std::endl;
+            else std::cerr << "ERROR main: Could not open system prompt file: " << system_prompt_file_path << ". Using default prompt. (log not open)" << std::endl; // Keep cerr
+            // Fall through to use hardcoded default
+        }
+    }
+    
+    if (system_prompt.empty()) {
+        // Default system prompt if not loaded from file or file was empty
+        system_prompt = R"EOF(You are an AI assistant. Tools are available.
 When calling a tool, respond ONLY with a single JSON object: {"tool_name": "...", "parameters": {...}}.
 No other text, explanations, or markdown.
 
@@ -188,7 +245,11 @@ Available tools:
 - {"name": "trash_message", "description": "Moves a specific message to trash using its ID.", "parameters": {"message_id": "string"}}
 - {"name": "list_messages", "description": "Lists messages matching a query. Returns a list of messages, each including sender (from), subject, snippet, and message ID.", "parameters": {"query": "string (Gmail search query, e.g., 'is:unread')", "max_results": "integer (optional, specifies maximum number of messages to return)"}}
 - {"name": "get_message_content", "description": "Gets the full raw content (headers, body, payload, etc.) of a specific message using its ID. Use this if the snippet from list_messages is insufficient and the user wants more details.", "parameters": {"message_id": "string"}}
-// TODO: Add concise descriptions for other tools: get_label, create_label, update_label, delete_label, get_history
+- {"name": "get_label", "description": "Gets details for a specific label by ID.", "parameters": {"label_id": "string"}}
+- {"name": "create_label", "description": "Creates a new label.", "parameters": {"name": "string", "label_list_visibility": "string (optional: labelShow, labelHide, labelShowIfUnread)", "message_list_visibility": "string (optional: show, hide)"}}
+- {"name": "update_label", "description": "Updates an existing label by ID.", "parameters": {"label_id": "string", "name": "string (optional)", "label_list_visibility": "string (optional)", "message_list_visibility": "string (optional)"}}
+- {"name": "delete_label", "description": "Deletes a label by ID.", "parameters": {"label_id": "string"}}
+- {"name": "get_history", "description": "Gets mailbox history.", "parameters": {"start_history_id": "string (optional)", "max_results": "integer (optional)"}}
 
 Tool results will be provided via role "tool".
 Based on the result:
@@ -197,6 +258,9 @@ Based on the result:
 - Ask for clarification.
 If no tool is needed, respond directly. If a tool call errors, inform the user or try an alternative.
 )EOF";
+        if (main_debug_log.is_open()) main_debug_log << "INFO main: Using default system prompt." << std::endl;
+        // else std::cout << "INFO main: Using default system prompt." << std::endl; // Replaced by log
+    }
 
     // initialize LlamaInference object
     // Determine the number of threads to use
@@ -212,11 +276,12 @@ If no tool is needed, respond directly. If a tool call errors, inform the user o
         main_debug_log << "INFO main: Using " << n_threads << " threads for generation." << std::endl;
         main_debug_log << "INFO main: Using " << n_threads_batch << " threads for batch processing." << std::endl;
     } else {
-        std::cout << "INFO main: Using " << n_threads << " threads for generation." << std::endl;
-        std::cout << "INFO main: Using " << n_threads_batch << " threads for batch processing." << std::endl;
+        // std::cout << "INFO main: Using " << n_threads << " threads for generation." << std::endl; // Replaced by log (if open)
+        // std::cout << "INFO main: Using " << n_threads_batch << " threads for batch processing." << std::endl; // Replaced by log (if open)
+        // If log isn't open here, it's a critical failure already noted.
     }
 
-    LlamaInference llama(model_path, ngl, n_ctx, n_threads, n_threads_batch);
+    LlamaInference llama(model_path, ngl, n_ctx, gmail_address, n_threads, n_threads_batch);
 
     // Set system prompt
     llama.setSystemPrompt(system_prompt);
@@ -225,17 +290,19 @@ If no tool is needed, respond directly. If a tool call errors, inform the user o
     if (user_max_response_chars > 0) {
         llama.setMaxResponseChars(user_max_response_chars);
         if (main_debug_log.is_open()) main_debug_log << "INFO main: User override: Set max_response_chars to " << user_max_response_chars << std::endl;
-        else std::cout << "INFO main: User override: Set max_response_chars to " << user_max_response_chars << std::endl;
+        // else std::cout << "INFO main: User override: Set max_response_chars to " << user_max_response_chars << std::endl; // Replaced by log
     } else {
         // Log the default value being used (which is n_ctx, set in LlamaInference constructor)
         // To get this value accurately for logging, we might need a getter in LlamaInference or pass n_ctx to this log.
         // For simplicity, we'll just state it defaults to context size here.
         if (main_debug_log.is_open()) main_debug_log << "INFO main: max_response_chars defaulted to context_size (" << n_ctx << ")." << std::endl;
-        else std::cout << "INFO main: max_response_chars defaulted to context_size (" << n_ctx << ")." << std::endl;
+        // else std::cout << "INFO main: max_response_chars defaulted to context_size (" << n_ctx << ")." << std::endl; // Replaced by log
     }
 
     if (!llama.initialize()) {
-        std::cerr << "Failed to initialize LlamaInference." << std::endl;
+        if (main_debug_log.is_open()) main_debug_log << "ERROR main: Failed to initialize LlamaInference." << std::endl;
+        else std::cerr << "ERROR main: Failed to initialize LlamaInference (log not open)." << std::endl; // Keep cerr
+        // std::cerr << "Failed to initialize LlamaInference." << std::endl; // Already logged
         return 1;
     }
 
@@ -298,7 +365,8 @@ If no tool is needed, respond directly. If a tool call errors, inform the user o
                 main_debug_log << "DEBUG main: Prompt from UI: '" << prompt << "'" << std::endl;
                 main_debug_log << "DEBUG main: is_streaming is false." << std::endl;
             } else { // Fallback if log isn't open
-                std::cout << "DEBUG main: Event::Return triggered with prompt: '" << prompt << "'" << std::endl;
+                // std::cout << "DEBUG main: Event::Return triggered with prompt: '" << prompt << "'" << std::endl; // Replaced
+                // Avoid cout from here if log isn't open
             }
 
             response = "";

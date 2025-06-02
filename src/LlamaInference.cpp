@@ -3,6 +3,8 @@
 #include <cstring>
 #include <iostream>
 #include <functional>
+#include <iomanip> // Required for std::setw, std::hex
+#include <sstream> // Required for std::ostringstream
 
 // Added: for json
 #include "nlohmann/json.hpp"
@@ -11,6 +13,28 @@
 
 // Using alias for json
 using json = nlohmann::json;
+
+// Helper function to URL encode a string
+std::string url_encode(const std::string& value) {
+    std::ostringstream escaped;
+    escaped.fill('0');
+    escaped << std::hex;
+
+    for (char c : value) {
+        // Keep alphanumeric and other safe characters like - _ . ! ~ * ' ( )
+        if (isalnum(c) || c == '-' || c == '_' || c == '.' || c == '!' || c == '~' ||
+            c == '*' || c == '\'' || c == '(' || c == ')') {
+            escaped << c;
+        } else if (c == ' ') { // Special case for space
+            escaped << '+';
+        }
+        else {
+            // Any other characters are percent-encoded
+            escaped << '%' << std::setw(2) << std::uppercase << static_cast<int>(static_cast<unsigned char>(c));
+        }
+    }
+    return escaped.str();
+}
 
 // Helper function to try parsing LLM response as a tool call
 // Returns true if it's a tool call, and populates tool_name and tool_params
@@ -45,10 +69,16 @@ bool tryParseToolCall(const std::string& llm_response, std::string& tool_name, j
 }
 } // end anonymous namespace
 
-LlamaInference::LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size, int num_threads_generate, int num_threads_batch)
+LlamaInference::LlamaInference(const std::string& model_path, 
+                               int n_gpu_layers, 
+                               int context_size, 
+                               const std::string& gmail_service_addr,
+                               int num_threads_generate, 
+                               int num_threads_batch)
     : model_path_(model_path), 
       n_gpu_layers_(n_gpu_layers), 
       context_size_(context_size), 
+      gmail_microservice_address_(gmail_service_addr),
       num_threads_generate_(num_threads_generate), 
       num_threads_batch_(num_threads_batch),
       max_response_chars_(context_size) { // Default max_response_chars to context_size
@@ -90,11 +120,10 @@ bool LlamaInference::initialize() {
     model_params.n_gpu_layers = n_gpu_layers_;
     model_ = llama_model_load_from_file(model_path_.c_str(), model_params);
     if (!model_) {
-        fprintf(stderr, "error: unable to load model\n");
         if (debug_log_file_.is_open()) {
-            debug_log_file_ << "ERROR LlamaInference::initialize: llama_model_load_from_file failed for path: " << model_path_ << std::endl << std::flush;
+            debug_log_file_ << "ERROR LlamaInference::initialize: unable to load model. Path: " << model_path_ << std::endl << std::flush;
         } else {
-            std::cerr << "ERROR LlamaInference::initialize: llama_model_load_from_file failed (log file not open). Path: " << model_path_ << std::endl;
+            std::cerr << "CRITICAL ERROR LlamaInference::initialize: unable to load model (log file not open). Path: " << model_path_ << std::endl;
         }
         return false;
     }
@@ -109,11 +138,10 @@ bool LlamaInference::initialize() {
     ctx_params.n_threads_batch = num_threads_batch_ > 0 ? num_threads_batch_ : 0; // 0 for llama.cpp default
     ctx_ = llama_init_from_model(model_, ctx_params);
     if (!ctx_) {
-        fprintf(stderr, "error: failed to create the llama_context\n");
         if (debug_log_file_.is_open()) {
-            debug_log_file_ << "ERROR LlamaInference::initialize: llama_init_from_model failed." << std::endl << std::flush;
+            debug_log_file_ << "ERROR LlamaInference::initialize: failed to create the llama_context." << std::endl << std::flush;
         } else {
-            std::cerr << "ERROR LlamaInference::initialize: llama_init_from_model failed (log file not open)." << std::endl;
+            std::cerr << "CRITICAL ERROR LlamaInference::initialize: failed to create the llama_context (log file not open)." << std::endl;
         }
         cleanup();
         return false;
@@ -190,7 +218,6 @@ void LlamaInference::initializeChat() {
     prev_len_ = llama_chat_apply_template(tmpl, messages_.data(), messages_.size(), false, nullptr, 0);
     
     if (prev_len_ < 0) {
-        fprintf(stderr, "failed to apply chat template for system prompt\n");
         if (debug_log_file_.is_open()) {
             debug_log_file_ << "ERROR LlamaInference::initializeChat: llama_chat_apply_template failed for system prompt. Error code: " << prev_len_ << std::endl << std::flush;
         }
@@ -258,14 +285,12 @@ std::string LlamaInference::generateWithCallback(
     );
 
     if (n_prompt_tokens < 0) {
-        fprintf(stderr, "failed to tokenize the prompt (error code: %d)\n", n_prompt_tokens);
         if (debug_log_file_.is_open()) debug_log_file_ << "ERROR LlamaInference::generateWithCallback: llama_tokenize failed. Code: " << n_prompt_tokens << std::endl << std::flush;
         return "";
     }
     prompt_tokens.resize(n_prompt_tokens);
 
     if (prompt_tokens.empty() && !prompt.empty()) {
-        fprintf(stderr, "failed to tokenize the prompt (resulted in empty token list)\n");
         if (debug_log_file_.is_open()) debug_log_file_ << "ERROR LlamaInference::generateWithCallback: llama_tokenize resulted in empty token list for non-empty prompt." << std::endl << std::flush;
         return "";
     }
@@ -332,7 +357,6 @@ std::string LlamaInference::generateWithCallback(
         }
 
         if (llama_decode(ctx_, batch) != 0) {
-            fprintf(stderr, "llama_decode failed\n");
             if (debug_log_file_.is_open()) debug_log_file_ << "ERROR LlamaInference::generateWithCallback: llama_decode failed after processing prompt." << std::endl << std::flush;
             return response; // Return whatever we might have accumulated or empty
         }
@@ -360,7 +384,7 @@ std::string LlamaInference::generateWithCallback(
         if (piece_len >= 0) {
             piece_str.assign(piece_buf, piece_len);
         } else {
-            fprintf(stderr, "failed to convert token to piece (error/buf too small: %d)\n", piece_len);
+            if (debug_log_file_.is_open()) debug_log_file_ << "ERROR LlamaInference::generateWithCallback: failed to convert token to piece (error/buf too small: " << piece_len << ")" << std::endl << std::flush;
         }
         
         if (!piece_str.empty()) {
@@ -399,16 +423,16 @@ std::string LlamaInference::chat(const std::string& user_message,
     bool stream_output, std::string& output_string, std::function<void()> redraw_ui) {
 
     // ***** VERY FIRST LINE FOR DEBUGGING *****
-    fprintf(stderr, "****** URGENT DEBUG: LlamaInference::chat HAS BEEN ENTERED! ******\n");
-    fflush(stderr); // Force it to print NOW
+    // fprintf(stderr, "****** URGENT DEBUG: LlamaInference::chat HAS BEEN ENTERED! ******\n");
+    // fflush(stderr); // Force it to print NOW
 
     // Existing log logic
     if (debug_log_file_.is_open()) {
-        debug_log_file_ << "****** DEBUG LlamaInference::chat: METHOD ENTERED (after fprintf) ******" << std::endl;
+        debug_log_file_ << "****** DEBUG LlamaInference::chat: METHOD ENTERED ******" << std::endl;
         debug_log_file_ << "DEBUG LlamaInference::chat: User input (first 100 chars): " << user_message.substr(0, 100) << (user_message.length() > 100 ? "..." : "") << std::endl;
         debug_log_file_ << "DEBUG LlamaInference::chat: stream_output: " << stream_output << std::endl << std::flush;
     } else {
-        std::cerr << "****** ERROR LlamaInference::chat: METHOD ENTERED (after fprintf), BUT LOG FILE NOT OPEN! ******" << std::endl;
+        std::cerr << "CRITICAL ERROR LlamaInference::chat: METHOD ENTERED (after fprintf), BUT LOG FILE NOT OPEN! ******" << std::endl;
         std::cerr << "ERROR LlamaInference::chat: User input (first 100 chars): " << user_message.substr(0, 100) << (user_message.length() > 100 ? "..." : "") << std::endl;
     }
 
@@ -417,9 +441,9 @@ std::string LlamaInference::chat(const std::string& user_message,
         if (debug_log_file_.is_open()) {
             debug_log_file_ << "ERROR LlamaInference::chat: Model/context/sampler not initialized! model=" << model_ << ", ctx=" << ctx_ << ", sampler=" << sampler_ << std::endl << std::flush;
         } else {
-            std::cerr << "ERROR LlamaInference::chat: Model/context/sampler not initialized!" << std::endl;
+            std::cerr << "CRITICAL ERROR LlamaInference::chat: Model/context/sampler not initialized! (log not open)" << std::endl;
         }
-        fprintf(stderr, "model not initialized\n"); // This might not be visible with FTXUI
+        // fprintf(stderr, "model not initialized\n"); // Removed
         return "[Error: Model not initialized]";
     }
     if (debug_log_file_.is_open()) debug_log_file_ << "DEBUG LlamaInference::chat: Model, context, and sampler OK." << std::endl << std::flush;
@@ -467,8 +491,8 @@ std::string LlamaInference::chat(const std::string& user_message,
     char* user_msg_content = strdup(user_message.c_str());
     if (!user_msg_content) {
         if (debug_log_file_.is_open()) debug_log_file_ << "ERROR LlamaInference::chat: strdup failed for user_message!" << std::endl << std::flush;
-        else std::cerr << "ERROR LlamaInference::chat: strdup failed for user_message!" << std::endl;
-        fprintf(stderr, "Failed to duplicate user message string.\n");
+        else std::cerr << "CRITICAL ERROR LlamaInference::chat: strdup failed for user_message! (log not open)" << std::endl;
+        // fprintf(stderr, "Failed to duplicate user message string.\n"); // Removed
         return "[Error: Memory allocation failed]";
     }
     if (debug_log_file_.is_open()) debug_log_file_ << "DEBUG LlamaInference::chat: strdup successful, about to add to messages_." << std::endl << std::flush;
@@ -489,7 +513,7 @@ std::string LlamaInference::chat(const std::string& user_message,
 
         if (!chat_template_str) {
             if (debug_log_file_.is_open()) debug_log_file_ << "WARNING LlamaInference::chat: [Loop " << i << "] Model has no chat template. Using fallback." << std::endl << std::flush;
-            fprintf(stderr, "Warning: Model does not have a chat template. Using default.\n");
+            // fprintf(stderr, "Warning: Model does not have a chat template. Using default.\n"); // Removed
             chat_template_str = "{{#each messages}}{{@root.bos_token}}{{role}}\n{{content}}{{@root.eos_token}}{{/each}}";
         }
 
@@ -529,10 +553,11 @@ std::string LlamaInference::chat(const std::string& user_message,
                 }
                 debug_log_file_ << std::flush;
             }
-            fprintf(stderr, "Error: Failed to apply chat template (length %d). Dumping messages:\n", formatted_len);
-            for(const auto& msg : messages_) {
-                fprintf(stderr, "Role: %s, Content: %s\n", msg.role, msg.content);
-            }
+            // fprintf(stderr, "Error: Failed to apply chat template (length %d). Dumping messages:\n", formatted_len); // Removed
+            // Log dump to debug_log_file_ already happens above
+            // for(const auto& msg : messages_) { // Removed duplicate loop
+            //     fprintf(stderr, "Role: %s, Content: %s\n", msg.role, msg.content);
+            // }
             // Attempt to recover by removing the last message if it caused the issue.
             if (!messages_.empty()) {
                 free(const_cast<char*>(messages_.back().content));
@@ -541,7 +566,7 @@ std::string LlamaInference::chat(const std::string& user_message,
             return "[Error: Failed to format prompt for LLM]";
         }
         if (static_cast<size_t>(formatted_len) > formatted_.size()) {
-            fprintf(stderr, "Error: Formatted prompt length (%d) exceeds buffer size (%zu).\n", formatted_len, formatted_.size());
+            // fprintf(stderr, "Error: Formatted prompt length (%d) exceeds buffer size (%zu).\n", formatted_len, formatted_.size()); // Replaced
             if (debug_log_file_.is_open()) {
                 debug_log_file_ << "ERROR LlamaInference::chat: [Loop " << i << "] Formatted prompt length (" << formatted_len 
                                 << ") exceeds buffer size (" << formatted_.size() 
@@ -594,7 +619,9 @@ std::string LlamaInference::chat(const std::string& user_message,
         if (debug_log_file_.is_open()) {
             debug_log_file_ << "DEBUG: Prompt for LLM (length " << prompt_for_llm.length() << "):\n" << prompt_for_llm << "\nEND DEBUG PROMPT" << std::endl;
         } else {
-            std::cout << "DEBUG: Prompt for LLM (length " << prompt_for_llm.length() << "):\n" << prompt_for_llm << "\nEND DEBUG PROMPT" << std::endl;
+            // std::cout << "DEBUG: Prompt for LLM (length " << prompt_for_llm.length() << "):\n" << prompt_for_llm << "\nEND DEBUG PROMPT" << std::endl; // Replaced
+            // This case (log not open) should be rare and critical, but avoid std::cout from library.
+            // If log isn't open, something is very wrong higher up. For now, we'll just not log this if file is closed.
         }
 
         // This call is for the LLM to decide on a tool or give a final answer
@@ -605,15 +632,16 @@ std::string LlamaInference::chat(const std::string& user_message,
 
 
         if (current_llm_response_text.empty() && prompt_for_llm.length() > 0) {
-             // fprintf(stderr, "Warning: LLM generated an empty response for a non-empty prompt.\n"); // Keep as fprintf for now
+             // fprintf(stderr, "Warning: LLM generated an empty response for a non-empty prompt.\n"); // Replaced
              if (debug_log_file_.is_open()) debug_log_file_ << "WARNING: LLM generated an empty response for a non-empty prompt." << std::endl;
-             else std::cerr << "WARNING: LLM generated an empty response for a non-empty prompt." << std::endl;
+             // else std::cerr << "WARNING: LLM generated an empty response for a non-empty prompt." << std::endl; // Replaced
              // This could be an error or a sign the model has nothing more to say.
         }
         if (debug_log_file_.is_open()) {
             debug_log_file_ << "DEBUG: LLM Raw Response:\n" << current_llm_response_text << "\nEND DEBUG LLM RESPONSE" << std::endl << std::flush;
         } else {
-            std::cout << "DEBUG: LLM Raw Response:\n" << current_llm_response_text << "\nEND DEBUG LLM RESPONSE" << std::endl;
+            // std::cout << "DEBUG: LLM Raw Response:\n" << current_llm_response_text << "\nEND DEBUG LLM RESPONSE" << std::endl; // Replaced
+            // Similar to above, if log isn't open, avoid std::cout.
         }
 
 
@@ -675,11 +703,12 @@ std::string LlamaInference::chat(const std::string& user_message,
                 debug_log_file_ << "DEBUG LlamaInference::chat: Tool Name: " << tool_name << std::endl;
                 debug_log_file_ << "DEBUG LlamaInference::chat: Tool Params: " << tool_params.dump() << std::endl << std::flush;
             } else {
-                std::cout << "DEBUG: Detected tool call: " << tool_name << " with params: " << tool_params.dump() << std::endl;
+                // std::cout << "DEBUG: Detected tool call: " << tool_name << " with params: " << tool_params.dump() << std::endl; // Replaced
+                 // If log isn't open, don't output this to cout from library code.
             }
             tool_calls_remaining--;
             if (tool_calls_remaining < 0) {
-                fprintf(stderr, "Error: Maximum tool call limit reached.\n");
+                if (debug_log_file_.is_open()) debug_log_file_ << "ERROR LlamaInference::chat: Maximum tool call limit reached." << std::endl << std::flush;
                 // Add a message to history indicating this error
                 const char* err_msg = "[Error: Max tool calls reached]";
                 char* err_msg_content = strdup(err_msg);
@@ -723,50 +752,78 @@ std::string LlamaInference::chat(const std::string& user_message,
                 tool_api_endpoint = "/messages";
                 http_method = "GET";
                 // Parameters like "query" and "max_results" will be handled by make_tool_request for GET
-                // REMOVED: Hardcoded max_results capping. Let LLM/Python service handle it.
-                /*
-                if (tool_params.contains("max_results") && tool_params["max_results"].is_number()) {
-                    int current_max_results = tool_params["max_results"].get<int>();
-                    const int MAX_RESULTS_CAP = 3; // Cap at 3 messages
-                    if (current_max_results > MAX_RESULTS_CAP) {
-                        tool_params["max_results"] = MAX_RESULTS_CAP;
-                        if (debug_log_file_.is_open()) {
-                            debug_log_file_ << "INFO: Capping list_messages max_results from " << current_max_results 
-                                            << " to " << MAX_RESULTS_CAP << std::endl << std::flush;
-                        }
-                    }
-                } else if (!tool_params.contains("max_results")) { // If not specified by LLM, add a default small one
-                     tool_params["max_results"] = 3; // Default cap if LLM doesn't specify
-                     if (debug_log_file_.is_open()) {
-                        debug_log_file_ << "INFO: list_messages max_results not specified by LLM, setting to 3." << std::endl << std::flush;
-                     }
-                }
-                */
             }
             else if (tool_name == "get_message_content") {
                 http_method = "GET";
                 if (tool_params.contains("message_id") && tool_params["message_id"].is_string()) {
                     std::string message_id = tool_params["message_id"].get<std::string>();
                     tool_api_endpoint = "/messages/" + message_id;
-                    // Parameters for GET are typically in the URL, so tool_params might be empty or not used for body.
-                    // If message_id was the *only* param, we might want to clear tool_params or ensure make_tool_request handles it well for GET.
-                    // For now, assuming make_tool_request handles empty tool_params for GET, or only uses relevant ones for query string.
-                    // It's safer to remove message_id from tool_params if it's path-based to avoid it becoming a query param.
                     tool_params.erase("message_id"); 
                 } else {
                     const char* param_err = "[Error: get_message_content tool call missing 'message_id' string parameter]";
                     if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: " << param_err << std::endl << std::flush;
                     char* param_err_content = strdup(param_err);
                     if(param_err_content) messages_.push_back({"system", param_err_content});
-                    // Skip making the request and let LLM handle the error
                     continue; 
                 }
             }
+            // New tool mappings:
+            else if (tool_name == "get_label") { // GET /labels/{label_id}
+                http_method = "GET";
+                if (tool_params.contains("label_id") && tool_params["label_id"].is_string()) {
+                    std::string label_id = tool_params["label_id"].get<std::string>();
+                    tool_api_endpoint = "/labels/" + label_id;
+                    tool_params.erase("label_id");
+                } else {
+                    const char* param_err = "[Error: get_label tool call missing 'label_id' string parameter]";
+                     if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: " << param_err << std::endl << std::flush;
+                    char* param_err_content = strdup(param_err);
+                    if(param_err_content) messages_.push_back({"system", param_err_content});
+                    continue;
+                }
+            } else if (tool_name == "create_label") { // POST /labels
+                tool_api_endpoint = "/labels";
+                http_method = "POST";
+                // Body will be tool_params
+            } else if (tool_name == "update_label") { // PUT /labels/{label_id}
+                http_method = "PUT";
+                if (tool_params.contains("label_id") && tool_params["label_id"].is_string()) {
+                    std::string label_id = tool_params["label_id"].get<std::string>();
+                    tool_api_endpoint = "/labels/" + label_id;
+                    // We keep label_id in params for the body if API expects it,
+                    // or remove it if it's only in path. Gmail API update body doesn't need id.
+                    // Let's assume for now the body sent is tool_params which might include name, etc.
+                    // If label_id in body conflicts, the Python service should ignore it if it's in path.
+                } else {
+                    const char* param_err = "[Error: update_label tool call missing 'label_id' string parameter]";
+                    if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: " << param_err << std::endl << std::flush;
+                    char* param_err_content = strdup(param_err);
+                    if(param_err_content) messages_.push_back({"system", param_err_content});
+                    continue;
+                }
+            } else if (tool_name == "delete_label") { // DELETE /labels/{label_id}
+                http_method = "DELETE";
+                 if (tool_params.contains("label_id") && tool_params["label_id"].is_string()) {
+                    std::string label_id = tool_params["label_id"].get<std::string>();
+                    tool_api_endpoint = "/labels/" + label_id;
+                    tool_params.erase("label_id"); // ID is in path, not body
+                } else {
+                    const char* param_err = "[Error: delete_label tool call missing 'label_id' string parameter]";
+                    if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: " << param_err << std::endl << std::flush;
+                    char* param_err_content = strdup(param_err);
+                    if(param_err_content) messages_.push_back({"system", param_err_content});
+                    continue;
+                }
+            } else if (tool_name == "get_history") { // GET /history
+                 tool_api_endpoint = "/history";
+                 http_method = "GET";
+                 // Params like start_history_id, max_results are query params
+            }
             else {
                 std::string unknown_tool_msg = "[Error: Unknown tool name: " + tool_name + "]";
-                // fprintf(stderr, "%s\n", unknown_tool_msg.c_str()); // Keep as fprintf for now
+                // fprintf(stderr, "%s\n", unknown_tool_msg.c_str()); // Replaced
                 if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: Unknown tool name: " << tool_name << std::endl;
-                else std::cerr << "ERROR: Unknown tool name: " << tool_name << std::endl;
+                // else std::cerr << "ERROR: Unknown tool name: " << tool_name << std::endl; // Replaced
 
                 char* unknown_tool_content = strdup(unknown_tool_msg.c_str());
                 if(unknown_tool_content) messages_.push_back({"system", unknown_tool_content}); // Or some error role
@@ -781,14 +838,14 @@ std::string LlamaInference::chat(const std::string& user_message,
             if (debug_log_file_.is_open()) {
                 debug_log_file_ << "DEBUG LlamaInference::chat: RAW tool_response_str from make_tool_request (BEFORE strdup) for tool '" << tool_name << "':\n" << tool_response_str << "\nEND RAW tool_response_str" << std::endl << std::flush;
             } else {
-                std::cout << "DEBUG LlamaInference::chat: RAW tool_response_str from make_tool_request (BEFORE strdup) for tool '" << tool_name << "':\n" << tool_response_str << "\nEND RAW tool_response_str" << std::endl;
+                // std::cout << "DEBUG LlamaInference::chat: RAW tool_response_str from make_tool_request (BEFORE strdup) for tool '" << tool_name << "':\n" << tool_response_str << "\nEND RAW tool_response_str" << std::endl; // Replaced
             }
             // ***** END DEBUG BLOCK *****
 
             if (debug_log_file_.is_open()) {
                 debug_log_file_ << "DEBUG: Tool Response from microservice:\n" << tool_response_str << "\nEND DEBUG TOOL RESPONSE" << std::endl;
             } else {
-                std::cout << "DEBUG: Tool Response from microservice:\n" << tool_response_str << "\nEND DEBUG TOOL RESPONSE" << std::endl;
+                // std::cout << "DEBUG: Tool Response from microservice:\n" << tool_response_str << "\nEND DEBUG TOOL RESPONSE" << std::endl; // Replaced
             }
 
             // Add tool response to history.
@@ -936,25 +993,39 @@ std::string LlamaInference::make_tool_request(const std::string& http_method, co
                 // httplib itself doesn't directly expose a general purpose URL encoder for query params.
                 // For simplicity, assuming keys are safe and values are simple strings/numbers.
                 // Proper URL encoding: httplib::detail::encode_url can be studied or use a library if complex values are expected.
-                query_string += key; // Assuming key is URL-safe
+                query_string += url_encode(key); // Use url_encode for key
                 query_string += "=";
                 if (val.is_string()) {
-                    query_string += val.get<std::string>(); // TODO: URL encode this value
+                    query_string += url_encode(val.get<std::string>()); // URL encode string value
                 } else if (val.is_number()) {
-                    query_string += std::to_string(val.get<double>());
+                    query_string += url_encode(std::to_string(val.get<double>())); // Encode number as string
                 } else if (val.is_boolean()) {
-                    query_string += val.get<bool>() ? "true" : "false";
+                    query_string += val.get<bool>() ? "true" : "false"; // Booleans are typically fine
+                } else if (val.is_null()) {
+                    // How to handle null? Skip or empty string? Skipping for now.
+                    // query_string += ""; 
                 }
                 // Add other type handlers if necessary
                 first_param = false;
             }
             request_path += query_string;
             if (debug_log_file_.is_open()) debug_log_file_ << "INFO: Constructed GET request path with query: " << request_path << std::endl;
-            else std::cout << "INFO: Constructed GET request path with query: " << request_path << std::endl;
+            // else std::cout << "INFO: Constructed GET request path with query: " << request_path << std::endl; // Replaced
         }
         res = cli.Get(request_path.c_str());
     } else if (method_upper == "DELETE") {
-        res = cli.Delete(endpoint.c_str());
+        // For DELETE, if there are params, they might be in query string or body.
+        // httplib's Delete takes body. If params are for query, adjust path.
+        // Gmail API for delete_label and trash_message uses ID in path, no body.
+        // Our current tool_params.erase for these cases handles it.
+        // If a DELETE tool needed a body, params_str would be used.
+        res = cli.Delete(endpoint.c_str(), params_str, "application/json");
+    } else if (method_upper == "PUT") { // Added PUT method
+        if (!params_str.empty()) {
+            res = cli.Put(endpoint.c_str(), params_str, "application/json");
+        } else { // PUT with no body (less common but possible)
+            res = cli.Put(endpoint.c_str());
+        }
     }
     // Add other methods like PUT if needed
     else {
@@ -973,7 +1044,8 @@ std::string LlamaInference::make_tool_request(const std::string& http_method, co
             error_response["reason"] = res->reason;
             error_response["body"] = res->body;
             // For debugging:
-            // std::cerr << "Tool request error: " << error_response.dump(2) << std::endl;
+            // std::cerr << "Tool request error: " << error_response.dump(2) << std::endl; // Replaced
+            if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: Tool request error: " << error_response.dump(2) << std::endl << std::flush;
             return error_response.dump();
         }
     } else {
@@ -983,7 +1055,8 @@ std::string LlamaInference::make_tool_request(const std::string& http_method, co
         error_response["httplib_error_code"] = static_cast<int>(err); // httplib::Error is an enum
         error_response["httplib_error_message"] = httplib::to_string(err);
         // For debugging:
-        // std::cerr << "Tool request httplib error: " << error_response.dump(2) << std::endl;
+        // std::cerr << "Tool request httplib error: " << error_response.dump(2) << std::endl; // Replaced
+        if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: Tool request httplib error: " << error_response.dump(2) << std::endl << std::flush;
         return error_response.dump();
     }
 }

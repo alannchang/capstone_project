@@ -1,24 +1,25 @@
 # 📬 InboxPilot (Name subject to change)
 
-**InboxPilot** is a project aiming to create a local-first, privacy-respecting Gmail management application. It currently features C++ based local LLM inference via `llama.cpp` and a Python-based microservice for Gmail API interaction.
+**InboxPilot** is a project aiming to create a local-first, privacy-respecting Gmail management application. It currently features C++ based local LLM inference via `llama.cpp` (with a TUI chat interface) and a Python-based microservice for Gmail API interaction.
 
-🚧 **Note: This project is under active development. The final feature set and architecture may evolve. Some features described in older documentation (like a fully integrated TUI and Reinforcement Learning agent) are currently either in early stages or planned for future development.**
+🚧 **Note: This project is under active development. The final feature set and architecture may evolve. Some features described in older documentation (like a fully integrated TUI for email management and a Reinforcement Learning agent) are currently either in early stages or planned for future development.**
 
 ## 🔍 Overview
 
-InboxPilot's core is to intelligently manage your Gmail inbox. The current version provides the foundational blocks: local LLM processing and Gmail connectivity.
+InboxPilot's core is to intelligently manage your Gmail inbox. The current version provides the foundational blocks: local LLM processing with a chat interface, and Gmail connectivity via a separate microservice.
 
 **Currently implemented or well-developed features:**
 
-- **Local LLM Inference**: Utilizes `llama.cpp` for on-device language model operations (implemented in `src/LlamaInference.cpp`).
-- **Gmail API Access**: A Python microservice (`gmail-microservice/gmail_service.py`) handles communication with the Gmail API via OAuth2 for email management tasks.
+- **Local LLM Inference with TUI Chat**: Utilizes `llama.cpp` for on-device language model operations. A terminal-based user interface (TUI) using FTXUI provides a chat interface to interact with the LLM (implemented in `src/main.cpp` and `src/LlamaInference.cpp`).
+- **Gmail API Access**: A Python microservice (`gmail-microservice/gmail_service.py`) handles communication with the Gmail API via OAuth2 for email management tasks. This service is functional but not yet fully integrated with the C++ TUI application.
 
 **Features in planning/early development (may not be fully functional):**
 
-- 💻 TUI-based email viewer and command console (FTXUI is a planned dependency).
-- 🧠 RL agent that learns preferred actions (archive, label, delete, etc.).
-- 🗣 LLM-generated summaries and explanations integrated with email workflows.
-- 🔁 Feedback loop: user confirms/overrides → model improves.
+- 💻 **Integrated Email Management TUI**: Enhancing the current TUI to directly view, manage, and organize emails by calling the Gmail microservice.
+- 🔗 **C++ and Python Microservice Integration**: Implementing the HTTP client logic within the C++ application to communicate with the Python Gmail microservice, enabling the TUI to perform Gmail actions.
+- 🧠 **RL agent** that learns preferred actions (archive, label, delete, etc.).
+- 🗣 **LLM-generated summaries and explanations** integrated with email workflows (beyond the current chat functionality).
+- 🔁 **Feedback loop**: user confirms/overrides → model improves.
 
 ## 🧱 Architecture (Current High-Level)
 
@@ -31,7 +32,8 @@ InboxPilot's core is to intelligently manage your Gmail inbox. The current versi
                      ▼
         ┌────────────────────────────┐
         │    C++ Application Logic   │
-        │     (src/main.cpp)         │
+        │     (src/main.cpp -        │
+        │      FTXUI Chat TUI)       │
         └────────────┬───────────────┘
                      │
                      ▼
@@ -40,7 +42,8 @@ InboxPilot's core is to intelligently manage your Gmail inbox. The current versi
         │  (src/LlamaInference.cpp)  │
         │      (llama.cpp based)     │
         └────────────────────────────┘
-                     │ (Communication Method TBD)
+                     │ (Communication Method TBD:
+                     │  C++ HTTP Client to Python Service)
                      ▼
         ┌────────────────────────────┐
         │  Gmail Microservice (Python)│
@@ -58,12 +61,13 @@ InboxPilot's core is to intelligently manage your Gmail inbox. The current versi
 
 |Component|Description|Language|Status|
 |---------|-----------|--------|------|
-|C++ Core Logic|Main application logic, orchestrates LLM.|C++|Partially Implemented (in `src/main.cpp`)| 
-|LLM Engine|LLM-based summarization and natural explanations|C/C++ (llama.cpp)|Implemented (`src/LlamaInference.cpp`)| 
-|Gmail Microservice|Manages Gmail API access and OAuth2|Python|Implemented (`gmail-microservice/gmail_service.py`)| 
-|TUI Frontend|Rich terminal UI using FTXUI|C++|Planned/Early Development|
+|C++ Core Logic & TUI|Main application logic, TUI chat interface, orchestrates LLM.|C++|Partially Implemented (in `src/main.cpp`)| 
+|LLM Engine|LLM-based chat and text generation|C/C++ (llama.cpp)|Implemented (`src/LlamaInference.cpp`)| 
+|Gmail Microservice|Manages Gmail API access and OAuth2 via FastAPI|Python|Implemented (`gmail-microservice/gmail_service.py`)| 
+|IPC Layer (C++ to Python)|HTTP Client in C++ to call Python service endpoints|C++ ↔ Python|Planned/To Be Implemented|
+|TUI Email Frontend|Rich terminal UI using FTXUI for full email management|C++|Planned (enhancement of current TUI)|\
 |RL Agent|Learns actions over time via reinforcement|C++ (mlpack) or Python|Planned|
-|IPC Layer|Connects C++ components and Python service|C++ ↔ Python|To Be Defined/Implemented|
+|Core App Controller|Orchestrates all modules for integrated email management|C++|Planned|
 
 ## 🔄 Learning Loop Example (Envisioned)
 
@@ -122,7 +126,7 @@ cd build
 ./chat -m path/to/your/gguf/model
 ```
 
-_Specific instructions for running `main.cpp` depend on its current implementation (e.g., if it requires arguments, provides a TUI, etc.)._
+_Specific instructions for running `main.cpp` depend on its current implementation (e.g., if it requires arguments, provides a TUI, etc.). The C++ application currently provides a chat interface with the LLM. Full email management capabilities via the TUI are planned and will require integration with the Gmail microservice._
 
 #### Gmail Microservice (Python):
 
@@ -142,7 +146,7 @@ source .venv/bin/activate
 # Run the service (actual command might vary)
 python gmail_service.py
 ```
-_Note: The C++ application and Python microservice are currently separate components. Their integration method and combined execution flow are yet to be fully defined and implemented._
+_Note: The C++ application (TUI chat) and Python microservice are currently separate components. Their integration (C++ app calling the Python service) is planned but not yet fully implemented._
 
 ## 🧠 Future Features (Planned)
 

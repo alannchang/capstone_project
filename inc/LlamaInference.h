@@ -14,7 +14,12 @@
 class LlamaInference {
 public:
     // Constructor with configuration options
-    LlamaInference(const std::string& model_path, int n_gpu_layers, int context_size, int num_threads_generate = 4, int num_threads_batch = 4);
+    LlamaInference(const std::string& model_path, 
+                   int n_gpu_layers, 
+                   int context_size, 
+                   const std::string& gmail_service_addr,
+                   int num_threads_generate = 4, 
+                   int num_threads_batch = 4);
     
     // Destructor to clean up resources
     ~LlamaInference();
@@ -54,7 +59,7 @@ private:
     int num_threads_generate_;
     int num_threads_batch_;
     std::string system_prompt_;
-    std::string gmail_microservice_address_ = "http://localhost:8000"; // Default, make configurable
+    std::string gmail_microservice_address_; // Will be set by constructor
     std::ofstream debug_log_file_;
     
     // LLAMA resources

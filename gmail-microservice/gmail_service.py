@@ -344,11 +344,9 @@ class GmailManager:
             
             # Now fetch metadata for the collected IDs
             detailed_messages = []
-            print(f"DEBUG: About to fetch metadata for {len(listed_messages_ids)} message IDs.") # DEBUG PRINT
             for msg_id_obj in listed_messages_ids:
                 try:
                     msg_id = msg_id_obj['id']
-                    print(f"DEBUG: Fetching metadata for ID: {msg_id}") # DEBUG PRINT
                     msg_data = self.service.users().messages().get(
                         userId='me', 
                         id=msg_id, 
@@ -356,15 +354,11 @@ class GmailManager:
                         metadataHeaders=['From', 'Subject'] # Snippet comes by default with metadata
                     ).execute()
                     
-                    print(f"DEBUG: Raw msg_data for ID {msg_id}: {msg_data}") # DEBUG PRINT
-
                     headers = msg_data.get('payload', {}).get('headers', [])
                     sender = next((h['value'] for h in headers if h['name'].lower() == 'from'), 'N/A')
                     subject = next((h['value'] for h in headers if h['name'].lower() == 'subject'), 'N/A')
                     snippet = msg_data.get('snippet', '')
                     
-                    print(f"DEBUG: Parsed for ID {msg_id}: From='{sender}', Subject='{subject}', Snippet='{snippet[:30]}...' ") # DEBUG PRINT
-
                     detailed_messages.append({
                         'id': msg_id,
                         'threadId': msg_id_obj['threadId'],
@@ -539,10 +533,10 @@ def list_messages_endpoint(
     List messages from Gmail inbox.
     Handles pagination to retrieve messages matching the query, up to max_results if specified.
     """
-    manager = GmailManager()
+    # manager = GmailManager() # Use the global instance
     # Pass max_results to the manager method
-    messages = manager.list_messages(query=query, max_results=max_results) 
-    if manager.service is None: # Check if service initialization failed
+    messages = gmail_manager.list_messages(query=query, max_results=max_results) 
+    if gmail_manager.service is None: # Check if service initialization failed
         raise HTTPException(status_code=500, detail="Failed to connect to Gmail service.")
     return {"messages": messages}
 
@@ -551,9 +545,9 @@ def get_message_content_endpoint(message_id: str = Path(..., description="The ID
     """
     Get the full content of a specific message by its ID.
     """
-    manager = GmailManager()
-    message_content = manager.get_message_content(message_id=message_id)
-    if manager.service is None: # Check if service initialization failed
+    # manager = GmailManager() # Use the global instance
+    message_content = gmail_manager.get_message_content(message_id=message_id)
+    if gmail_manager.service is None: # Check if service initialization failed
         raise HTTPException(status_code=500, detail="Failed to connect to Gmail service.")
     if 'error' in message_content:
         # Distinguish between a 404 (not found) and other errors if needed
