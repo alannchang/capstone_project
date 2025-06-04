@@ -1,0 +1,13 @@
+Metadata-Version: 2.4
+Name: gmail-microservice
+Version: 0.1.0
+Summary: Gmail API Microservice
+Requires-Python: >=3.10
+Description-Content-Type: text/markdown
+Requires-Dist: fastapi[standard]
+Requires-Dist: uvicorn
+Requires-Dist: google-auth-oauthlib
+Requires-Dist: google-auth-httplib2
+Requires-Dist: google-api-python-client
+Requires-Dist: python-multipart
+Requires-Dist: pydantic[email]
