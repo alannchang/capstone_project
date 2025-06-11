@@ -63,6 +63,34 @@ endif()
 
 FetchContent_MakeAvailable(llama_cpp ftxui json httplib)
 
+# --- Add FAISS as subdirectory ---
+# This approach gives us more control over the build configuration
+FetchContent_Declare(
+    faiss
+    GIT_REPOSITORY https://github.com/facebookresearch/faiss.git
+    GIT_TAG v1.8.0
+    GIT_SHALLOW TRUE
+)
+
+FetchContent_GetProperties(faiss)
+if(NOT faiss_POPULATED)
+    FetchContent_Populate(faiss)
+    
+    # Configure FAISS options before adding as subdirectory
+    set(FAISS_ENABLE_GPU OFF CACHE BOOL "" FORCE)
+    set(FAISS_BUILD_TESTS OFF CACHE BOOL "" FORCE)
+    set(FAISS_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
+    set(FAISS_ENABLE_PYTHON OFF CACHE BOOL "" FORCE)
+    set(BUILD_TESTING OFF CACHE BOOL "" FORCE)
+    set(FAISS_OPT_LEVEL generic CACHE STRING "" FORCE)
+    
+    # Try to disable BLAS requirement or use internal implementations
+    set(FAISS_ENABLE_C_API ON CACHE BOOL "" FORCE)
+    
+    # Add FAISS as subdirectory with custom error handling
+    add_subdirectory(${faiss_SOURCE_DIR} ${faiss_BINARY_DIR} EXCLUDE_FROM_ALL)
+endif()
+
 # ───── Sources ─────────────────────────────────────────────
 file(GLOB SRC_FILES src/*.cpp)
 
@@ -75,6 +103,7 @@ target_link_libraries(chat PRIVATE
     nlohmann_json::nlohmann_json
     httplib::httplib
     sqlite3_static
+    faiss
 )
 
 target_include_directories(chat PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
