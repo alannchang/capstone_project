@@ -94,7 +94,13 @@ endif()
 # ───── Sources ─────────────────────────────────────────────
 file(GLOB SRC_FILES src/*.cpp)
 
+# Exclude test files from main executable
+list(REMOVE_ITEM SRC_FILES ${CMAKE_CURRENT_SOURCE_DIR}/src/test_database.cpp)
+
 add_executable(chat ${SRC_FILES})
+
+# Create test executable for database testing
+add_executable(test_database src/test_database.cpp src/DatabaseManager.cpp)
 
 # ───── Linking ─────────────────────────────────────────────
 target_link_libraries(chat PRIVATE
@@ -106,4 +112,10 @@ target_link_libraries(chat PRIVATE
     faiss
 )
 
+target_link_libraries(test_database PRIVATE
+    nlohmann_json::nlohmann_json
+    sqlite3_static
+)
+
 target_include_directories(chat PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
+target_include_directories(test_database PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/inc)
