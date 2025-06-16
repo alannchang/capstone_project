@@ -10,6 +10,7 @@
 // Added includes
 #include "httplib.h"
 #include "nlohmann/json.hpp"
+#include "DatabaseManager.h"
 
 class LlamaInference {
 public:
@@ -50,6 +51,9 @@ public:
     void setGpuLayers(int ngl);
     void setMaxResponseChars(int max_chars);
     
+    // Get behavioral context
+    std::string getBehavioralContext(const std::string& user_message);
+    
 private:
     // Configuration
     std::string model_path_;
@@ -62,6 +66,9 @@ private:
     std::string gmail_microservice_address_; // Will be set by constructor
     std::ofstream debug_log_file_;
     
+    // Database logging
+    DatabaseManager db_manager_;
+    
     // LLAMA resources
     llama_model* model_ = nullptr;
     llama_context* ctx_ = nullptr;
@@ -73,6 +80,10 @@ private:
     std::vector<llama_chat_message> messages_;
     std::vector<char> formatted_;
     int prev_len_ = 0;
+    
+    // Helper methods
+    std::string cleanResponseForLogging(const std::string& response);
+    void extractAndLogBehavior(const std::string& tool_name, const nlohmann::json& tool_params, const std::string& tool_response);
     
     // Initialize chat with system prompt
     void initializeChat();

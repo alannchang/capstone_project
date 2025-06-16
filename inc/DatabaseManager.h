@@ -3,6 +3,7 @@
 
 #include <string>
 #include <vector>
+#include <map>
 #include <sqlite3.h>
 #include <nlohmann/json.hpp>
 
@@ -19,7 +20,17 @@ struct EmbeddingRecord {
     int id;
     int vector_id;
     std::string summary;
-    std::vector<float> embedding; // Optional, for debugging
+    std::vector<float> embedding;
+};
+
+struct BehaviorPattern {
+    std::string action_type;
+    std::string action_value;
+    std::string context_type;
+    std::string context_value;
+    int frequency;
+    std::string last_occurrence;
+    nlohmann::json metadata;
 };
 
 class DatabaseManager {
@@ -39,11 +50,37 @@ public:
     // Retrieve tool calls
     std::vector<ToolCallRecord> getRecentToolCalls(int limit = 10);
     std::vector<ToolCallRecord> getToolCallsByTimeRange(const std::string& start_time, 
-                                                        const std::string& end_time);
+                                                       const std::string& end_time);
     
     // Embedding management
     bool logEmbedding(int tool_call_id, int vector_id, const std::string& summary);
     std::vector<EmbeddingRecord> getEmbeddingsByVectorIds(const std::vector<int>& vector_ids);
+    bool storeEmbedding(int vector_id, const std::string& summary, const std::vector<float>& embedding);
+    std::vector<EmbeddingRecord> getAllEmbeddings();
+    
+    // Generic pattern recognition methods
+    bool logBehavior(const std::string& action_type,
+                    const std::string& action_value,
+                    const std::string& context_type,
+                    const std::string& context_value,
+                    const std::string& message_id = "",
+                    const nlohmann::json& metadata = nullptr);
+                    
+    std::vector<BehaviorPattern> getBehaviorPatterns(
+        const std::string& action_type = "",
+        const std::string& context_type = "",
+        int min_frequency = 2);
+        
+    std::vector<BehaviorPattern> getFrequentBehaviors(
+        const std::string& action_type,
+        const std::string& context_type,
+        int min_frequency = 3);
+        
+    int getBehaviorFrequency(
+        const std::string& action_type,
+        const std::string& action_value,
+        const std::string& context_type,
+        const std::string& context_value);
     
     // Utility functions
     bool isInitialized() const { return db_ != nullptr; }

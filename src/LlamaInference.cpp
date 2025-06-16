@@ -77,7 +77,8 @@ LlamaInference::LlamaInference(const std::string& model_path,
       gmail_microservice_address_(gmail_service_addr),
       num_threads_generate_(num_threads_generate), 
       num_threads_batch_(num_threads_batch),
-      max_response_chars_(context_size) { // Default max_response_chars to context_size
+      max_response_chars_(context_size), // Default max_response_chars to context_size
+      db_manager_("gmail_assistant.db") {
     debug_log_file_.open("llama_debug.log", std::ios::app); // Open log file in append mode
     if (debug_log_file_.is_open()) {
         debug_log_file_ << "\n--- LlamaInference Initialized ---" << std::endl << std::flush;
@@ -157,6 +158,16 @@ bool LlamaInference::initialize() {
         initializeChat();
     }
     
+    // Initialize database
+    if (!db_manager_.initialize()) {
+        if (debug_log_file_.is_open()) {
+            debug_log_file_ << "ERROR LlamaInference::initialize: Failed to initialize database: " << db_manager_.getLastError() << std::endl << std::flush;
+        } else {
+            std::cerr << "ERROR LlamaInference::initialize: Failed to initialize database (log not open): " << db_manager_.getLastError() << std::endl;
+        }
+        // Don't fail initialization for database issues, just log the error
+    }
+
     if (debug_log_file_.is_open()) {
         debug_log_file_ << "DEBUG LlamaInference::initialize: Initialization successful." << std::endl << std::flush;
     }
@@ -448,7 +459,6 @@ std::string LlamaInference::chat(const std::string& user_message,
     char* user_msg_content = strdup(user_message.c_str());
     if (!user_msg_content) {
         if (debug_log_file_.is_open()) debug_log_file_ << "ERROR LlamaInference::chat: strdup failed for user_message!" << std::endl << std::flush;
-        else std::cerr << "CRITICAL ERROR LlamaInference::chat: strdup failed for user_message! (log not open)" << std::endl;
         // fprintf(stderr, "Failed to duplicate user message string.\n"); // Removed
         return "[Error: Memory allocation failed]";
     }
@@ -765,7 +775,19 @@ std::string LlamaInference::chat(const std::string& user_message,
 
             if (debug_log_file_.is_open()) {
                 debug_log_file_ << "DEBUG: Tool Response from microservice:\n" << tool_response_str << "\nEND DEBUG TOOL RESPONSE" << std::endl;
-            } 
+            }
+            
+            // Log the tool call to database (with cleaned response)
+            std::string cleaned_tool_response = cleanResponseForLogging(tool_response_str);
+            if (!db_manager_.logToolCall(user_message, tool_name, tool_params.dump(), cleaned_tool_response)) {
+                if (debug_log_file_.is_open()) {
+                    debug_log_file_ << "WARNING LlamaInference::chat: Failed to log tool call to database: " << db_manager_.getLastError() << std::endl;
+                }
+            }
+            
+            // Extract and log behavior
+            extractAndLogBehavior(tool_name, tool_params, tool_response_str);
+            
             // Add tool response to history.
             char* tool_resp_content = strdup(tool_response_str.c_str());
             if (!tool_resp_content) { /* error handling */ return "[Error: Memory alloc for tool response]"; }
@@ -778,6 +800,15 @@ std::string LlamaInference::chat(const std::string& user_message,
                 debug_log_file_ << "DEBUG LlamaInference::chat: LLM response was NOT parsed as a tool call (original or extracted). Treating as final response." << std::endl;
                 debug_log_file_ << "DEBUG LlamaInference::chat: String attempted for parsing (first 100): " << potential_json_str.substr(0,100) << "..." << std::endl << std::flush;
             }
+            
+            // Log the complete conversation to database (with cleaned response)
+            std::string cleaned_response = cleanResponseForLogging(output_string);
+            if (!db_manager_.logToolCall(user_message, "chat", "", cleaned_response)) {
+                if (debug_log_file_.is_open()) {
+                    debug_log_file_ << "WARNING LlamaInference::chat: Failed to log conversation to database: " << db_manager_.getLastError() << std::endl;
+                }
+            }
+            
             // It has already been streamed to the UI via the `combined_callback`.
             return output_string; // Final response, exit loop.
         }
@@ -798,6 +829,14 @@ std::string LlamaInference::chat(const std::string& user_message,
     } // Also append to output_string for UI
     output_string += "\n" + std::string(max_calls_msg);
     redraw_ui(); // Ensure the final error message is displayed
+
+    // Log the conversation to database (including the error state, with cleaned response)
+    std::string cleaned_final_response = cleanResponseForLogging(output_string);
+    if (!db_manager_.logToolCall(user_message, "chat", "", cleaned_final_response)) {
+        if (debug_log_file_.is_open()) {
+            debug_log_file_ << "WARNING LlamaInference::chat: Failed to log conversation to database: " << db_manager_.getLastError() << std::endl;
+        }
+    }
 
     return output_string;
 }
@@ -964,4 +1003,178 @@ std::string LlamaInference::make_tool_request(const std::string& http_method, co
         if (debug_log_file_.is_open()) debug_log_file_ << "ERROR: Tool request httplib error: " << error_response.dump(2) << std::endl << std::flush;
         return error_response.dump();
     }
+}
+
+std::string LlamaInference::cleanResponseForLogging(const std::string& response) {
+    std::string cleaned = response;
+    
+    // Remove <think> blocks
+    size_t think_start = 0;
+    while ((think_start = cleaned.find("<think>", think_start)) != std::string::npos) {
+        size_t think_end = cleaned.find("</think>", think_start);
+        if (think_end != std::string::npos) {
+            think_end += 8; // Length of "</think>"
+            cleaned.erase(think_start, think_end - think_start);
+        } else {
+            // Malformed think block, just remove from <think> onwards
+            cleaned.erase(think_start);
+            break;
+        }
+    }
+    
+    // Remove tool call JSON (since we log that separately in tool params)
+    size_t json_start = cleaned.find("{\"tool_name\":");
+    if (json_start != std::string::npos) {
+        size_t json_end = cleaned.find("}", json_start);
+        if (json_end != std::string::npos) {
+            cleaned.erase(json_start, json_end - json_start + 1);
+        }
+    }
+    
+    // Trim whitespace
+    size_t start = cleaned.find_first_not_of(" \t\n\r");
+    if (start == std::string::npos) return "";
+    
+    size_t end = cleaned.find_last_not_of(" \t\n\r");
+    cleaned = cleaned.substr(start, end - start + 1);
+    
+    // Limit length to 500 characters max
+    if (cleaned.length() > 500) {
+        cleaned = cleaned.substr(0, 497) + "...";
+    }
+    
+    return cleaned;
+}
+
+void LlamaInference::extractAndLogBehavior(const std::string& tool_name, const nlohmann::json& tool_params, const std::string& tool_response) {
+    // Extract metadata from tool response
+    nlohmann::json metadata;
+    try {
+        metadata = nlohmann::json::parse(tool_response);
+    } catch (const nlohmann::json::parse_error&) {
+        metadata = nlohmann::json::object();
+    }
+
+    // Map tool names to behavior types
+    std::map<std::string, std::pair<std::string, std::string>> tool_to_behavior = {
+        // Email actions
+        {"gmail_delete_message", {"delete", "message"}},
+        {"gmail_trash_message", {"delete", "message"}},
+        {"gmail_modify_labels", {"label", "message"}},
+        {"gmail_send_message", {"send", "message"}},
+        {"gmail_forward_message", {"forward", "message"}},
+        {"gmail_reply_to_message", {"reply", "message"}},
+        {"gmail_mark_as_read", {"read", "message"}},
+        {"gmail_mark_as_unread", {"unread", "message"}},
+        {"gmail_archive_message", {"archive", "message"}},
+        
+        // Time-based patterns
+        {"gmail_list_messages", {"view", "time"}},
+        {"gmail_search_messages", {"search", "time"}},
+        
+        // Category-based patterns
+        {"gmail_list_labels", {"view", "category"}},
+        {"gmail_create_label", {"create", "category"}},
+        
+        // Priority patterns
+        {"gmail_mark_as_important", {"important", "priority"}},
+        {"gmail_mark_as_not_important", {"not_important", "priority"}}
+    };
+
+    auto behavior_it = tool_to_behavior.find(tool_name);
+    if (behavior_it == tool_to_behavior.end()) {
+        return; // Not a behavior we want to track
+    }
+
+    const auto& [action_type, context_type] = behavior_it->second;
+    std::string action_value = tool_name;
+    std::string context_value;
+    std::string message_id;
+
+    // Extract context value based on behavior type
+    if (context_type == "message") {
+        if (metadata.contains("messageId")) {
+            message_id = metadata["messageId"];
+        }
+        if (metadata.contains("from")) {
+            context_value = metadata["from"];
+        } else if (metadata.contains("sender")) {
+            context_value = metadata["sender"];
+        }
+    } else if (context_type == "time") {
+        // Extract time of day (morning, afternoon, evening)
+        auto now = std::chrono::system_clock::now();
+        auto hour = std::chrono::system_clock::to_time_t(now);
+        struct tm* timeinfo = std::localtime(&hour);
+        if (timeinfo->tm_hour < 12) {
+            context_value = "morning";
+        } else if (timeinfo->tm_hour < 17) {
+            context_value = "afternoon";
+        } else {
+            context_value = "evening";
+        }
+    } else if (context_type == "category") {
+        if (metadata.contains("label")) {
+            context_value = metadata["label"];
+        }
+    } else if (context_type == "priority") {
+        context_value = action_type; // important or not_important
+    }
+
+    if (!context_value.empty()) {
+        db_manager_.logBehavior(action_type, action_value, context_type, context_value, message_id, metadata);
+    }
+}
+
+std::string LlamaInference::getBehavioralContext(const std::string& user_message) {
+    std::stringstream context;
+    
+    // Get all behavior patterns
+    auto patterns = db_manager_.getBehaviorPatterns("", "", 2);
+    
+    if (patterns.empty()) {
+        return "";
+    }
+    
+    context << "Based on your email behavior patterns:\n";
+    
+    // Group patterns by context type
+    std::map<std::string, std::vector<BehaviorPattern>> grouped_patterns;
+    for (const auto& pattern : patterns) {
+        grouped_patterns[pattern.context_type].push_back(pattern);
+    }
+    
+    // Generate human-readable patterns
+    for (const auto& [context_type, type_patterns] : grouped_patterns) {
+        if (context_type == "message") {
+            context << "\nEmail handling patterns:\n";
+            for (const auto& pattern : type_patterns) {
+                context << "- You frequently " << pattern.action_type << " emails";
+                if (!pattern.context_value.empty()) {
+                    context << " from " << pattern.context_value;
+                }
+                context << " (" << pattern.frequency << " times)\n";
+            }
+        } else if (context_type == "time") {
+            context << "\nTime-based patterns:\n";
+            for (const auto& pattern : type_patterns) {
+                context << "- You often " << pattern.action_type << " emails in the " 
+                       << pattern.context_value << " (" << pattern.frequency << " times)\n";
+            }
+        } else if (context_type == "category") {
+            context << "\nCategory patterns:\n";
+            for (const auto& pattern : type_patterns) {
+                context << "- You frequently " << pattern.action_type << " the " 
+                       << pattern.context_value << " category (" << pattern.frequency << " times)\n";
+            }
+        } else if (context_type == "priority") {
+            context << "\nPriority patterns:\n";
+            for (const auto& pattern : type_patterns) {
+                context << "- You often mark emails as " << pattern.context_value 
+                       << " (" << pattern.frequency << " times)\n";
+            }
+        }
+    }
+    
+    return context.str();
 }

@@ -53,7 +53,22 @@ bool DatabaseManager::createTables() {
         )
     )";
     
-    return executeSQL(create_tool_calls) && executeSQL(create_embeddings);
+    // Create email_actions table for pattern recognition
+    std::string create_email_actions = R"(
+        CREATE TABLE IF NOT EXISTS email_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            timestamp TEXT NOT NULL DEFAULT (datetime('now')),
+            action_type TEXT NOT NULL,      -- e.g., 'delete', 'label', 'forward', 'reply'
+            action_value TEXT NOT NULL,     -- e.g., 'label:Important', 'forward:team@company.com'
+            context_type TEXT NOT NULL,     -- e.g., 'sender', 'subject', 'time', 'category'
+            context_value TEXT NOT NULL,    -- e.g., 'sam@gmail.com', 'Weekly Report', 'morning'
+            message_id TEXT,
+            metadata TEXT,                  -- JSON field for additional context
+            UNIQUE(action_type, action_value, message_id)
+        )
+    )";
+    
+    return executeSQL(create_tool_calls) && executeSQL(create_embeddings) && executeSQL(create_email_actions);
 }
 
 bool DatabaseManager::executeSQL(const std::string& sql) {
@@ -315,4 +330,246 @@ std::vector<EmbeddingRecord> DatabaseManager::getEmbeddingsByVectorIds(const std
     
     sqlite3_finalize(stmt);
     return records;
+}
+
+// Pattern Recognition Methods
+
+bool DatabaseManager::logBehavior(const std::string& action_type,
+                                const std::string& action_value,
+                                const std::string& context_type,
+                                const std::string& context_value,
+                                const std::string& message_id,
+                                const nlohmann::json& metadata) {
+    if (!db_) {
+        setError("Database not initialized");
+        return false;
+    }
+    
+    std::string sql = R"(
+        INSERT OR IGNORE INTO email_actions 
+        (action_type, action_value, context_type, context_value, message_id, metadata)
+        VALUES (?, ?, ?, ?, ?, ?)
+    )";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    
+    if (rc != SQLITE_OK) {
+        setError("Failed to prepare statement: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+    
+    sqlite3_bind_text(stmt, 1, action_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, action_value.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, context_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, context_value.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 5, message_id.c_str(), -1, SQLITE_STATIC);
+    
+    std::string metadata_str = metadata ? metadata.dump() : "{}";
+    sqlite3_bind_text(stmt, 6, metadata_str.c_str(), -1, SQLITE_STATIC);
+    
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        setError("Failed to log behavior: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+    
+    return true;
+}
+
+std::vector<BehaviorPattern> DatabaseManager::getBehaviorPatterns(
+    const std::string& action_type,
+    const std::string& context_type,
+    int min_frequency) {
+    
+    std::vector<BehaviorPattern> patterns;
+    if (!db_) {
+        setError("Database not initialized");
+        return patterns;
+    }
+    
+    std::string sql = R"(
+        SELECT 
+            action_type,
+            action_value,
+            context_type,
+            context_value,
+            COUNT(*) as frequency,
+            datetime(MAX(timestamp)) as last_occurrence,
+            metadata
+        FROM email_actions 
+        WHERE 1=1
+    )";
+    
+    if (!action_type.empty()) {
+        sql += " AND action_type = ?";
+    }
+    if (!context_type.empty()) {
+        sql += " AND context_type = ?";
+    }
+    
+    sql += R"(
+        GROUP BY action_type, action_value, context_type, context_value
+        HAVING COUNT(*) >= ?
+        ORDER BY frequency DESC, last_occurrence DESC
+    )";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    
+    if (rc != SQLITE_OK) {
+        setError("Failed to prepare statement: " + std::string(sqlite3_errmsg(db_)));
+        return patterns;
+    }
+    
+    int param_idx = 1;
+    if (!action_type.empty()) {
+        sqlite3_bind_text(stmt, param_idx++, action_type.c_str(), -1, SQLITE_STATIC);
+    }
+    if (!context_type.empty()) {
+        sqlite3_bind_text(stmt, param_idx++, context_type.c_str(), -1, SQLITE_STATIC);
+    }
+    sqlite3_bind_int(stmt, param_idx, min_frequency);
+    
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        BehaviorPattern pattern;
+        pattern.action_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 0));
+        pattern.action_value = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+        pattern.context_type = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        pattern.context_value = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 3));
+        pattern.frequency = sqlite3_column_int(stmt, 4);
+        pattern.last_occurrence = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 5));
+        
+        try {
+            std::string metadata_str = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 6));
+            pattern.metadata = nlohmann::json::parse(metadata_str);
+        } catch (const nlohmann::json::parse_error&) {
+            pattern.metadata = nlohmann::json::object();
+        }
+        
+        patterns.push_back(pattern);
+    }
+    
+    sqlite3_finalize(stmt);
+    return patterns;
+}
+
+std::vector<BehaviorPattern> DatabaseManager::getFrequentBehaviors(
+    const std::string& action_type,
+    const std::string& context_type,
+    int min_frequency) {
+    
+    return getBehaviorPatterns(action_type, context_type, min_frequency);
+}
+
+int DatabaseManager::getBehaviorFrequency(
+    const std::string& action_type,
+    const std::string& action_value,
+    const std::string& context_type,
+    const std::string& context_value) {
+    
+    if (!db_) {
+        setError("Database not initialized");
+        return 0;
+    }
+    
+    std::string sql = R"(
+        SELECT COUNT(*) 
+        FROM email_actions 
+        WHERE action_type = ? 
+        AND action_value = ? 
+        AND context_type = ? 
+        AND context_value = ?
+    )";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    
+    if (rc != SQLITE_OK) {
+        setError("Failed to prepare statement: " + std::string(sqlite3_errmsg(db_)));
+        return 0;
+    }
+    
+    sqlite3_bind_text(stmt, 1, action_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 2, action_value.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 3, context_type.c_str(), -1, SQLITE_STATIC);
+    sqlite3_bind_text(stmt, 4, context_value.c_str(), -1, SQLITE_STATIC);
+    
+    int frequency = 0;
+    if (sqlite3_step(stmt) == SQLITE_ROW) {
+        frequency = sqlite3_column_int(stmt, 0);
+    }
+    
+    sqlite3_finalize(stmt);
+    return frequency;
+}
+
+std::vector<EmbeddingRecord> DatabaseManager::getAllEmbeddings() {
+    std::vector<EmbeddingRecord> records;
+    
+    if (!db_) {
+        setError("Database not initialized");
+        return records;
+    }
+    
+    std::string sql = "SELECT id, vector_id, summary FROM embeddings ORDER BY id DESC";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    
+    if (rc != SQLITE_OK) {
+        setError("Failed to prepare embeddings query: " + std::string(sqlite3_errmsg(db_)));
+        return records;
+    }
+    
+    while ((rc = sqlite3_step(stmt)) == SQLITE_ROW) {
+        EmbeddingRecord record;
+        record.id = sqlite3_column_int(stmt, 0);
+        record.vector_id = sqlite3_column_int(stmt, 1);
+        record.summary = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 2));
+        
+        records.push_back(record);
+    }
+    
+    sqlite3_finalize(stmt);
+    return records;
+}
+
+bool DatabaseManager::storeEmbedding(int vector_id, const std::string& summary, const std::vector<float>& embedding) {
+    if (!db_) {
+        setError("Database not initialized");
+        return false;
+    }
+    
+    std::string sql = R"(
+        INSERT INTO embeddings (vector_id, summary, embedding)
+        VALUES (?, ?, ?)
+    )";
+    
+    sqlite3_stmt* stmt;
+    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+    
+    if (rc != SQLITE_OK) {
+        setError("Failed to prepare embedding storage: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+    
+    sqlite3_bind_int(stmt, 1, vector_id);
+    sqlite3_bind_text(stmt, 2, summary.c_str(), -1, SQLITE_STATIC);
+    
+    // Store embedding as BLOB
+    sqlite3_bind_blob(stmt, 3, embedding.data(), 
+                     static_cast<int>(embedding.size() * sizeof(float)), SQLITE_STATIC);
+    
+    rc = sqlite3_step(stmt);
+    sqlite3_finalize(stmt);
+    
+    if (rc != SQLITE_DONE) {
+        setError("Failed to store embedding: " + std::string(sqlite3_errmsg(db_)));
+        return false;
+    }
+    
+    return true;
 } 
