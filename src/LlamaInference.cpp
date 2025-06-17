@@ -1046,83 +1046,40 @@ std::string LlamaInference::cleanResponseForLogging(const std::string& response)
     return cleaned;
 }
 
-void LlamaInference::extractAndLogBehavior(const std::string& tool_name, const nlohmann::json& tool_params, const std::string& tool_response) {
-    // Extract metadata from tool response
-    nlohmann::json metadata;
+void LlamaInference::extractAndLogBehavior(
+    const std::string& tool_name, 
+    const nlohmann::json& tool_params, 
+    const std::string& tool_response) {
+    
+    if (debug_log_file_.is_open()) {
+        debug_log_file_ << "DEBUG LlamaInference::extractAndLogBehavior: Extracting behavior from tool call:" << std::endl;
+        debug_log_file_ << "  tool_name: " << tool_name << std::endl;
+        debug_log_file_ << "  tool_params: " << tool_params.dump() << std::endl;
+        debug_log_file_ << "  tool_response: " << tool_response << std::endl;
+    }
+
     try {
-        metadata = nlohmann::json::parse(tool_response);
-    } catch (const nlohmann::json::parse_error&) {
-        metadata = nlohmann::json::object();
-    }
-
-    // Map tool names to behavior types
-    std::map<std::string, std::pair<std::string, std::string>> tool_to_behavior = {
-        // Email actions
-        {"gmail_delete_message", {"delete", "message"}},
-        {"gmail_trash_message", {"delete", "message"}},
-        {"gmail_modify_labels", {"label", "message"}},
-        {"gmail_send_message", {"send", "message"}},
-        {"gmail_forward_message", {"forward", "message"}},
-        {"gmail_reply_to_message", {"reply", "message"}},
-        {"gmail_mark_as_read", {"read", "message"}},
-        {"gmail_mark_as_unread", {"unread", "message"}},
-        {"gmail_archive_message", {"archive", "message"}},
+        nlohmann::json metadata = nlohmann::json::parse(tool_response);
         
-        // Time-based patterns
-        {"gmail_list_messages", {"view", "time"}},
-        {"gmail_search_messages", {"search", "time"}},
-        
-        // Category-based patterns
-        {"gmail_list_labels", {"view", "category"}},
-        {"gmail_create_label", {"create", "category"}},
-        
-        // Priority patterns
-        {"gmail_mark_as_important", {"important", "priority"}},
-        {"gmail_mark_as_not_important", {"not_important", "priority"}}
-    };
-
-    auto behavior_it = tool_to_behavior.find(tool_name);
-    if (behavior_it == tool_to_behavior.end()) {
-        return; // Not a behavior we want to track
-    }
-
-    const auto& [action_type, context_type] = behavior_it->second;
-    std::string action_value = tool_name;
-    std::string context_value;
-    std::string message_id;
-
-    // Extract context value based on behavior type
-    if (context_type == "message") {
-        if (metadata.contains("messageId")) {
-            message_id = metadata["messageId"];
+        // Extract behavior based on tool type
+        if (tool_name == "gmail_delete_message") {
+            if (debug_log_file_.is_open()) {
+                debug_log_file_ << "DEBUG LlamaInference::extractAndLogBehavior: Logging delete behavior" << std::endl;
+            }
+            db_manager_.logBehavior(
+                "delete",
+                "gmail_delete_message",
+                "sender",
+                metadata["from"].get<std::string>(),
+                metadata["messageId"].get<std::string>(),
+                metadata
+            );
         }
-        if (metadata.contains("from")) {
-            context_value = metadata["from"];
-        } else if (metadata.contains("sender")) {
-            context_value = metadata["sender"];
+        // ... existing code ...
+    } catch (const std::exception& e) {
+        if (debug_log_file_.is_open()) {
+            debug_log_file_ << "ERROR LlamaInference::extractAndLogBehavior: Failed to extract behavior: " << e.what() << std::endl;
         }
-    } else if (context_type == "time") {
-        // Extract time of day (morning, afternoon, evening)
-        auto now = std::chrono::system_clock::now();
-        auto hour = std::chrono::system_clock::to_time_t(now);
-        struct tm* timeinfo = std::localtime(&hour);
-        if (timeinfo->tm_hour < 12) {
-            context_value = "morning";
-        } else if (timeinfo->tm_hour < 17) {
-            context_value = "afternoon";
-        } else {
-            context_value = "evening";
-        }
-    } else if (context_type == "category") {
-        if (metadata.contains("label")) {
-            context_value = metadata["label"];
-        }
-    } else if (context_type == "priority") {
-        context_value = action_type; // important or not_important
-    }
-
-    if (!context_value.empty()) {
-        db_manager_.logBehavior(action_type, action_value, context_type, context_value, message_id, metadata);
     }
 }
 

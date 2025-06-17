@@ -6,6 +6,7 @@
 #include <map>
 #include <sqlite3.h>
 #include <nlohmann/json.hpp>
+#include <fstream>
 
 struct ToolCallRecord {
     int id;
@@ -58,14 +59,15 @@ public:
     bool storeEmbedding(int vector_id, const std::string& summary, const std::vector<float>& embedding);
     std::vector<EmbeddingRecord> getAllEmbeddings();
     
-    // Generic pattern recognition methods
-    bool logBehavior(const std::string& action_type,
+    // Behavior logging
+    void logBehavior(const std::string& action_type,
                     const std::string& action_value,
                     const std::string& context_type,
                     const std::string& context_value,
-                    const std::string& message_id = "",
-                    const nlohmann::json& metadata = nullptr);
-                    
+                    const std::string& message_id,
+                    const nlohmann::json& metadata);
+    
+    // Generic pattern recognition methods
     std::vector<BehaviorPattern> getBehaviorPatterns(
         const std::string& action_type = "",
         const std::string& context_type = "",
@@ -90,6 +92,7 @@ private:
     sqlite3* db_;
     std::string db_path_;
     std::string last_error_;
+    std::ofstream debug_log_file_;
     
     // Helper functions
     bool createTables();

@@ -6,9 +6,17 @@
 
 DatabaseManager::DatabaseManager(const std::string& db_path) 
     : db_(nullptr), db_path_(db_path) {
+    debug_log_file_.open("database_debug.log", std::ios::app);
+    if (debug_log_file_.is_open()) {
+        debug_log_file_ << "\n--- DatabaseManager Initialized ---" << std::endl << std::flush;
+    }
 }
 
 DatabaseManager::~DatabaseManager() {
+    if (debug_log_file_.is_open()) {
+        debug_log_file_ << "--- DatabaseManager Cleanup ---" << std::endl << std::flush;
+        debug_log_file_.close();
+    }
     if (db_) {
         sqlite3_close(db_);
         db_ = nullptr;
@@ -334,49 +342,68 @@ std::vector<EmbeddingRecord> DatabaseManager::getEmbeddingsByVectorIds(const std
 
 // Pattern Recognition Methods
 
-bool DatabaseManager::logBehavior(const std::string& action_type,
+void DatabaseManager::logBehavior(const std::string& action_type,
                                 const std::string& action_value,
                                 const std::string& context_type,
                                 const std::string& context_value,
                                 const std::string& message_id,
                                 const nlohmann::json& metadata) {
-    if (!db_) {
-        setError("Database not initialized");
-        return false;
+    if (debug_log_file_.is_open()) {
+        debug_log_file_ << "DEBUG DatabaseManager::logBehavior: Attempting to log behavior:" << std::endl;
+        debug_log_file_ << "  action_type: " << action_type << std::endl;
+        debug_log_file_ << "  action_value: " << action_value << std::endl;
+        debug_log_file_ << "  context_type: " << context_type << std::endl;
+        debug_log_file_ << "  context_value: " << context_value << std::endl;
+        debug_log_file_ << "  message_id: " << message_id << std::endl;
+        debug_log_file_ << "  metadata: " << metadata.dump() << std::endl;
     }
-    
-    std::string sql = R"(
-        INSERT OR IGNORE INTO email_actions 
-        (action_type, action_value, context_type, context_value, message_id, metadata)
-        VALUES (?, ?, ?, ?, ?, ?)
-    )";
-    
-    sqlite3_stmt* stmt;
-    int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
-    
-    if (rc != SQLITE_OK) {
-        setError("Failed to prepare statement: " + std::string(sqlite3_errmsg(db_)));
-        return false;
+
+    try {
+        if (!db_) {
+            setError("Database not initialized");
+            return;
+        }
+        
+        std::string sql = R"(
+            INSERT OR IGNORE INTO email_actions 
+            (action_type, action_value, context_type, context_value, message_id, metadata)
+            VALUES (?, ?, ?, ?, ?, ?)
+        )";
+        
+        sqlite3_stmt* stmt;
+        int rc = sqlite3_prepare_v2(db_, sql.c_str(), -1, &stmt, nullptr);
+        
+        if (rc != SQLITE_OK) {
+            setError("Failed to prepare statement: " + std::string(sqlite3_errmsg(db_)));
+            return;
+        }
+        
+        sqlite3_bind_text(stmt, 1, action_type.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 2, action_value.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 3, context_type.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 4, context_value.c_str(), -1, SQLITE_STATIC);
+        sqlite3_bind_text(stmt, 5, message_id.c_str(), -1, SQLITE_STATIC);
+        
+        std::string metadata_str = metadata ? metadata.dump() : "{}";
+        sqlite3_bind_text(stmt, 6, metadata_str.c_str(), -1, SQLITE_STATIC);
+        
+        rc = sqlite3_step(stmt);
+        sqlite3_finalize(stmt);
+        
+        if (rc != SQLITE_DONE) {
+            setError("Failed to log behavior: " + std::string(sqlite3_errmsg(db_)));
+            return;
+        }
+        
+        if (debug_log_file_.is_open()) {
+            debug_log_file_ << "DEBUG DatabaseManager::logBehavior: Successfully logged behavior" << std::endl;
+        }
+    } catch (const std::exception& e) {
+        if (debug_log_file_.is_open()) {
+            debug_log_file_ << "ERROR DatabaseManager::logBehavior: Failed to log behavior: " << e.what() << std::endl;
+        }
+        throw;
     }
-    
-    sqlite3_bind_text(stmt, 1, action_type.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 2, action_value.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 3, context_type.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 4, context_value.c_str(), -1, SQLITE_STATIC);
-    sqlite3_bind_text(stmt, 5, message_id.c_str(), -1, SQLITE_STATIC);
-    
-    std::string metadata_str = metadata ? metadata.dump() : "{}";
-    sqlite3_bind_text(stmt, 6, metadata_str.c_str(), -1, SQLITE_STATIC);
-    
-    rc = sqlite3_step(stmt);
-    sqlite3_finalize(stmt);
-    
-    if (rc != SQLITE_DONE) {
-        setError("Failed to log behavior: " + std::string(sqlite3_errmsg(db_)));
-        return false;
-    }
-    
-    return true;
 }
 
 std::vector<BehaviorPattern> DatabaseManager::getBehaviorPatterns(
