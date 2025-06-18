@@ -11,13 +11,12 @@ MaiMail's core is to intelligently manage your Gmail inbox. The current version 
 **Currently implemented or well-developed features:**
 
 - **Local LLM Inference with TUI Chat**: Utilizes `llama.cpp` for on-device language model operations. A terminal-based user interface (TUI) using FTXUI provides a chat interface to interact with the LLM (implemented in `src/main.cpp` and `src/LlamaInference.cpp`).
-- **Gmail API Access**: A Python microservice (`gmail-microservice/gmail_service.py`) handles communication with the Gmail API via OAuth2 for email management tasks. This service is functional but not yet fully integrated with the C++ TUI application.
+- **Gmail API Access**: A Python microservice (`gmail-microservice/gmail_service.py`) handles communication with the Gmail API via OAuth2 for email management tasks.
+- **C++ and Python Microservice Integration**: Implementing the HTTP client logic within the C++ application to communicate with the Python Gmail microservice, enabling the TUI to perform Gmail actions.
 
 **Features in planning/early development (may not be fully functional):**
-
+- 🧠 **Pattern Recognition Based Recommendations**: When the LLM notices a pattern in the user's behaviors, the LLM will actively make recommendations to the user.
 - 💻 **Integrated Email Management TUI**: Enhancing the current TUI to directly view, manage, and organize emails by calling the Gmail microservice.
-- 🔗 **C++ and Python Microservice Integration**: Implementing the HTTP client logic within the C++ application to communicate with the Python Gmail microservice, enabling the TUI to perform Gmail actions.
-- 🗣 **LLM-generated summaries and explanations** integrated with email workflows (beyond the current chat functionality).
 
 <hr>
 Demo running on a Dell G16 (Intel i9 13900HX, ram upgraded to 96 GB, no GPU/CUDA being utilized):
@@ -58,16 +57,6 @@ https://github.com/user-attachments/assets/a5b28531-d85e-4969-9128-7df683720c61
         Gmail Inbox / Threads / Labels
 ```
 
-## 🧩 Components (Current & Planned)
-
-|Component|Description|Language|Status|
-|---------|-----------|--------|------|
-|C++ Core Logic & TUI|Main application logic, TUI chat interface, orchestrates LLM.|C++|Partially Implemented (in `src/main.cpp`)| 
-|LLM Engine|LLM-based chat and text generation|C/C++ (llama.cpp)|Implemented (`src/LlamaInference.cpp`)| 
-|Gmail Microservice|Manages Gmail API access and OAuth2 via FastAPI|Python|Implemented (`gmail-microservice/gmail_service.py`)| 
-|IPC Layer (C++ to Python)|HTTP Client in C++ to call Python service endpoints|C++ ↔ Python|Planned/To Be Implemented|
-|TUI Email Frontend|Rich terminal UI using FTXUI for full email management|C++|Planned (enhancement of current TUI)|
-
 ## 🛠️ Setup
 
 Note: this application only works with Gmail accounts.
@@ -102,22 +91,6 @@ cmake -B build # -DLLAMA_CURL=OFF maybe required if you are getting an error tha
 cd build && make
 ```
 
-### Running the application
-
-After the previous steps have been completed:
-
-#### C++ LLM Application (Example - if it's a standalone chat): 
-
-```bash
-# Navigate to the build directory
-cd build
-# Run the executable (actual name might vary based on CMakeLists.txt)
-# This example assumes a 'chat' executable and a model path argument
-./chat -m path/to/your/gguf/model
-```
-
-_Specific instructions for running `main.cpp` depend on its current implementation (e.g., if it requires arguments, provides a TUI, etc.). The C++ application currently provides a chat interface with the LLM. Full email management capabilities via the TUI are planned and will require integration with the Gmail microservice._
-
 #### Gmail Microservice (Python):
 
 First time building/running (using uv, not pip):
@@ -140,17 +113,24 @@ source .venv/bin/activate
 fastapi run gmail_service.py
 ```
 
-_Note: The C++ application (TUI chat) and Python microservice are currently separate components. Their integration (C++ app calling the Python service) is planned but not yet fully implemented._
+### Running the application
+
+After the previous steps have been completed:
+
+#### C++ LLM Application: 
+
+```bash
+# Navigate to the build directory
+cd build
+# Run the executable (actual name might vary based on CMakeLists.txt)
+# This example assumes a 'chat' executable and a model path argument
+./chat -m path/to/your/gguf/model
+```
 
 ## 🧠 Future Features (Planned)
 
 - An undo stack for enhanced user control.
 - Advanced label suggestions based on email content.
-- Action preview mode before executing.
-
-## 🛠 Development Status
-
-This is a work in progress.  Expect changes and improvements over time.
 
 ## 🙏 Acknowledgments
 
