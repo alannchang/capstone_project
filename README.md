@@ -98,7 +98,7 @@ https://www.googleapis.com/auth/gmail/readonly
 # Ensure you have CMake and a C++ compiler installed
 # Clone the repository with submodules (if any are used, e.g., llama.cpp)
 git clone --recurse-submodules https://github.com/alannchang/capstone_project.git
-cmake -B build
+cmake -B build # -DLLAMA_CURL=OFF maybe required if you are getting an error that states that curl cannot be found
 cd build && make
 ```
 
@@ -120,22 +120,26 @@ _Specific instructions for running `main.cpp` depend on its current implementati
 
 #### Gmail Microservice (Python):
 
+First time building/running (using uv, not pip):
 ```bash
-# Navigate to the microservice directory
 cd gmail-microservice
-# It's recommended to use a virtual environment
-python -m venv .venv
+# create virtual environment
+uv venv .venv
 source .venv/bin/activate
-# Install dependencies (assuming a requirements.txt or pyproject.toml based setup)
-# If pyproject.toml uses Poetry or similar, consult its documentation for install commands.
-# For a basic setup, ensure google-api-python-client and google-auth-oauthlib are installed.
-# Example using pip (if a requirements.txt exists or you install manually):
-# pip install -r requirements.txt 
-# or pip install google-api-python-client google-auth-oauthlib
-
+# install dependencies
+uv pip install .
 # Run the service (actual command might vary)
-python gmail_service.py
+fastapi run gmail_service.py
 ```
+
+After building/running the first time:
+```bash
+cd gmail-microservice
+# use existing virtual environment
+source .venv/bin/activate
+fastapi run gmail_service.py
+```
+
 _Note: The C++ application (TUI chat) and Python microservice are currently separate components. Their integration (C++ app calling the Python service) is planned but not yet fully implemented._
 
 ## 🧠 Future Features (Planned)
@@ -146,8 +150,7 @@ _Note: The C++ application (TUI chat) and Python microservice are currently sepa
 
 ## 🛠 Development Status
 
-This is a work in progress.
-Please note that this project is evolving — expect changes and improvements over time.
+This is a work in progress.  Expect changes and improvements over time.
 
 ## 🙏 Acknowledgments
 
