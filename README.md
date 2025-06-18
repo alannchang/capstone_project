@@ -21,6 +21,11 @@ InboxPilot's core is to intelligently manage your Gmail inbox. The current versi
 - 🗣 **LLM-generated summaries and explanations** integrated with email workflows (beyond the current chat functionality).
 - 🔁 **Feedback loop**: user confirms/overrides → model improves.
 
+<hr>
+Demo running on a Dell G16 (Intel i9 13900HX, ram upgraded to 96 GB, no GPU/CUDA being utilized):
+
+https://github.com/user-attachments/assets/a5b28531-d85e-4969-9128-7df683720c61
+
 ## 🧱 Architecture (Current High-Level)
 
 ```
