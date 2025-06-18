@@ -1,12 +1,12 @@
-# 📬 InboxPilot (Name subject to change)
+# 📬 MaiMail
 
-**InboxPilot** is a project aiming to create a local-first, privacy-respecting Gmail management application. It currently features C++ based local LLM inference via `llama.cpp` (with a TUI chat interface) and a Python-based microservice for Gmail API interaction.
+**MaiMail** is a project aiming to create a local-first, privacy-respecting Gmail management application. It currently features a C++ based local LLM inference via `llama.cpp` (with a TUI chat interface) and a Python-based microservice for Gmail API interaction.
 
-🚧 **Note: This project is under active development. The final feature set and architecture may evolve. Some features described in older documentation (like a fully integrated TUI for email management and a Reinforcement Learning agent) are currently either in early stages or planned for future development.**
+🚧 **Note: This project is under active development. The final feature set and architecture may evolve.**
 
 ## 🔍 Overview
 
-InboxPilot's core is to intelligently manage your Gmail inbox. The current version provides the foundational blocks: local LLM processing with a chat interface, and Gmail connectivity via a separate microservice.
+MaiMail's core is to intelligently manage your Gmail inbox. The current version provides the foundational blocks: local LLM processing with a chat interface, and Gmail connectivity via a separate microservice.
 
 **Currently implemented or well-developed features:**
 
@@ -17,9 +17,7 @@ InboxPilot's core is to intelligently manage your Gmail inbox. The current versi
 
 - 💻 **Integrated Email Management TUI**: Enhancing the current TUI to directly view, manage, and organize emails by calling the Gmail microservice.
 - 🔗 **C++ and Python Microservice Integration**: Implementing the HTTP client logic within the C++ application to communicate with the Python Gmail microservice, enabling the TUI to perform Gmail actions.
-- 🧠 **RL agent** that learns preferred actions (archive, label, delete, etc.).
 - 🗣 **LLM-generated summaries and explanations** integrated with email workflows (beyond the current chat functionality).
-- 🔁 **Feedback loop**: user confirms/overrides → model improves.
 
 <hr>
 Demo running on a Dell G16 (Intel i9 13900HX, ram upgraded to 96 GB, no GPU/CUDA being utilized):
@@ -30,8 +28,8 @@ https://github.com/user-attachments/assets/a5b28531-d85e-4969-9128-7df683720c61
 
 ```
         ┌────────────────────────────┐
-        │      User (Potential TUI)  │
-        │   (C++ app, FTXUI planned) │
+        │      User (TUI)            │
+        │   (C++ app, FTXUI)         │
         └────────────┬───────────────┘
                      │
                      ▼
@@ -60,8 +58,6 @@ https://github.com/user-attachments/assets/a5b28531-d85e-4969-9128-7df683720c61
         Gmail Inbox / Threads / Labels
 ```
 
-*The Reinforcement Learning (RL) agent and a more complex Core App Controller are envisioned but not yet distinctly implemented modules.*
-
 ## 🧩 Components (Current & Planned)
 
 |Component|Description|Language|Status|
@@ -70,18 +66,7 @@ https://github.com/user-attachments/assets/a5b28531-d85e-4969-9128-7df683720c61
 |LLM Engine|LLM-based chat and text generation|C/C++ (llama.cpp)|Implemented (`src/LlamaInference.cpp`)| 
 |Gmail Microservice|Manages Gmail API access and OAuth2 via FastAPI|Python|Implemented (`gmail-microservice/gmail_service.py`)| 
 |IPC Layer (C++ to Python)|HTTP Client in C++ to call Python service endpoints|C++ ↔ Python|Planned/To Be Implemented|
-|TUI Email Frontend|Rich terminal UI using FTXUI for full email management|C++|Planned (enhancement of current TUI)|\
-|RL Agent|Learns actions over time via reinforcement|C++ (mlpack) or Python|Planned|
-|Core App Controller|Orchestrates all modules for integrated email management|C++|Planned|
-
-## 🔄 Learning Loop Example (Envisioned)
-
-- New email arrives via Gmail API.
-- LLM summarizes the message.
-- RL agent suggests the best action based on learned behavior.
-- LLM builds a human-friendly explanation for the suggestion.
-- User confirms or overrides the action; feedback is recorded.
-- RL policy updates for better future decisions.
+|TUI Email Frontend|Rich terminal UI using FTXUI for full email management|C++|Planned (enhancement of current TUI)|
 
 ## 🛠️ Setup
 
@@ -155,16 +140,13 @@ _Note: The C++ application (TUI chat) and Python microservice are currently sepa
 
 ## 🧠 Future Features (Planned)
 
-- Offline training mode for the RL agent.
 - An undo stack for enhanced user control.
 - Advanced label suggestions based on email content.
 - Action preview mode before executing.
-- User-specific profiles and customization.
-- Plugin-like API for extending LLM capabilities.
 
 ## 🛠 Development Status
 
-This is a very early-stage project.
+This is a work in progress.
 Please note that this project is evolving — expect changes and improvements over time.
 
 ## 🙏 Acknowledgments
