@@ -6,13 +6,13 @@
 
 ## 🔍 Overview
 
-MaiMail's core is to intelligently manage your Gmail inbox. The current version provides the foundational blocks: local LLM processing with a chat interface, and Gmail connectivity via a separate microservice.
+MaiMail's core is to intelligently manage your Gmail inbox. The current version provides the foundational blocks: local LLM processing with a chat interface, and tool calling using a devoted Gmail microservice.
 
 **Currently implemented or well-developed features:**
 
 - **Local LLM Inference with TUI Chat**: Utilizes `llama.cpp` for on-device language model operations. A terminal-based user interface (TUI) using FTXUI provides a chat interface to interact with the LLM (implemented in `src/main.cpp` and `src/LlamaInference.cpp`).
 - **Gmail API Access**: A Python microservice (`gmail-microservice/gmail_service.py`) handles communication with the Gmail API via OAuth2 for email management tasks.
-- **C++ and Python Microservice Integration**: Implementing the HTTP client logic within the C++ application to communicate with the Python Gmail microservice, enabling the TUI to perform Gmail actions.
+- **C++ and Python Microservice Integration**: Implementing the HTTP client logic within the C++ application to enable tool/function calling to perform Gmail actions.
 
 **Features in planning/early development (may not be fully functional):**
 - 🧠 **Pattern Recognition Based Recommendations**: When the LLM notices a pattern in the user's behaviors, the LLM will actively make recommendations to the user.
