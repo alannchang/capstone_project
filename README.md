@@ -84,9 +84,7 @@ https://www.googleapis.com/auth/gmail/readonly
 
 ### Building with Cmake
 ```bash
-# Ensure you have CMake and a C++ compiler installed
-# Clone the repository with submodules (if any are used, e.g., llama.cpp)
-git clone --recurse-submodules https://github.com/alannchang/capstone_project.git
+git clone https://github.com/alannchang/capstone_project.git
 cmake -B build # -DLLAMA_CURL=OFF maybe required if you are getting an error that states that curl cannot be found
 cd build && make
 ```
@@ -96,19 +94,15 @@ cd build && make
 First time building/running (using uv, not pip):
 ```bash
 cd gmail-microservice
-# create virtual environment
 uv venv .venv
 source .venv/bin/activate
-# install dependencies
 uv pip install .
-# Run the service (actual command might vary)
 fastapi run gmail_service.py
 ```
 
 After building/running the first time:
 ```bash
 cd gmail-microservice
-# use existing virtual environment
 source .venv/bin/activate
 fastapi run gmail_service.py
 ```
@@ -120,11 +114,8 @@ After the previous steps have been completed:
 #### C++ LLM Application: 
 
 ```bash
-# Navigate to the build directory
 cd build
-# Run the executable (actual name might vary based on CMakeLists.txt)
-# This example assumes a 'chat' executable and a model path argument
-./chat -m path/to/your/gguf/model
+./chat -m path/to/your/gguf/model # -h option for complete list of command line args
 ```
 
 ## 🧠 Future Features (Planned)
