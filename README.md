@@ -21,7 +21,10 @@ MaiMail's core is to intelligently manage your Gmail inbox. The current version 
 <hr>
 Demo running on a Dell G16 (Intel i9 13900HX, ram upgraded to 96 GB, no GPU/CUDA being utilized):
 
-https://github.com/user-attachments/assets/a5b28531-d85e-4969-9128-7df683720c61
+
+https://github.com/user-attachments/assets/a2f77362-5e22-44ec-939d-7c4724c44506
+
+
 
 ## 🧱 Architecture (Current High-Level)
 
